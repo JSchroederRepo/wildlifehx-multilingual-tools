@@ -78,18 +78,38 @@
 <body>
 <div class="wrap">
   <h1>WildlifeHX — Multilingual Species Tables</h1>
-  <p class="sub">Turn an eBird trip report or an iNaturalist project into a species table with Latin, English and the languages you choose. CSV/TSV export included.</p>
+  <p class="sub">Translate any species name into many languages, or turn an eBird trip report / iNaturalist project into a multilingual species table. CSV/TSV export included.</p>
 
   <div class="tabs">
-    <div class="tab active" data-tab="eb">eBird Trip Report</div>
+    <div class="tab active" data-tab="tr">Species translator</div>
+    <div class="tab" data-tab="eb">eBird Trip Report</div>
     <div class="tab" data-tab="in">iNaturalist Project</div>
   </div>
 
-  <!-- ================= eBird panel ================= -->
-  <div class="panel active" id="panel-eb">
+  <!-- ================= Species translator panel ================= -->
+  <div class="panel active" id="panel-tr">
     <div class="card">
       <div class="row">
-        <input id="eb_url" type="text" placeholder="https://ebird.org/tripreport/546161" autofocus>
+        <input id="tr_input" type="text" value="Gavia immer" placeholder="Species name — scientific or common (e.g. Gavia immer, Common Loon, Calanus)" autofocus>
+        <button id="tr_go">Translate</button>
+      </div>
+      <p class="meta" id="tr_status"></p>
+      <div id="tr_cands"></div>
+    </div>
+    <div id="tr_result" class="hidden">
+      <div class="card">
+        <div id="tr_metainfo" class="meta"></div>
+        <div style="overflow:auto; max-height:70vh"><table id="tr_tbl"></table></div>
+        <p class="fixednote">American English uses iNaturalist's preferred English name (for birds this generally follows the Clements/eBird-style name). iNaturalist does not tag US vs UK English; “British English (iNat alternates)” lists the other distinct English names it carries (e.g. Great Northern Diver) and may include alternates that are not specifically British — treat it as a cue to double-check. If the wrong species appears, pick another match above.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= eBird panel ================= -->
+  <div class="panel" id="panel-eb">
+    <div class="card">
+      <div class="row">
+        <input id="eb_url" type="text" placeholder="https://ebird.org/tripreport/546161">
         <button id="eb_go">Generate</button>
       </div>
       <p class="meta" id="eb_status"></p>
@@ -481,6 +501,99 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   $('in_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });
   function flash(msg){ const b=$('in_tsv'); const o=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=o,1200); }
   renderLangPicker(); renderCatPicker();
+})();
+
+/* ====================== Species translator ====================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  const API = 'https://api.inaturalist.org/v1';
+  const LANGS = [
+    {label:'German',                 locale:'de'},
+    {label:'French',                locale:'fr'},
+    {label:'Spanish',                locale:'es'},
+    {label:'Norwegian',              locale:'nb'},
+    {label:'Dutch',                  locale:'nl'},
+    {label:'Chinese (Simplified)',   locale:'zh-CN', alt:'zh'},
+    {label:'Japanese',               locale:'ja'},
+  ];
+  let STATE = { results: [] };
+  function status(s, cls){ const e=$('tr_status'); e.className=cls||'meta'; e.innerText=s||''; }
+  function nameForLocale(names, locale, alt){
+    let m = names.filter(n=> n.locale===locale);
+    let v = m.find(n=>n.is_valid) || m[0];
+    if(!v && alt){ m = names.filter(n=> n.locale===alt); v = m.find(n=>n.is_valid)||m[0]; }
+    return v ? v.name : '';
+  }
+  function englishNames(names){
+    const en = names.filter(n=> n.locale==='en');
+    const pref = en.find(n=>n.is_valid) || en[0];
+    const prefName = pref ? pref.name : '';
+    const alts = en.filter(n=> n!==pref && n.name && n.name.toLowerCase()!==(prefName||'').toLowerCase()).map(n=>n.name);
+    return { american: prefName, british: [...new Set(alts)].join(' / ') };
+  }
+  function renderRows(tax, names){
+    const en = englishNames(names);
+    const rows = [
+      {label:'Scientific name', value: tax.name + (tax.rank? ' ('+tax.rank+')':'')},
+      {label:'American English', value: tax.preferred_common_name || en.american},
+      {label:'British English (iNat alternates)', value: en.british},
+    ];
+    LANGS.forEach(L=> rows.push({label:L.label, value: nameForLocale(names, L.locale, L.alt)}));
+    let h='<thead><tr><th>Language</th><th>Name</th></tr></thead><tbody>';
+    rows.forEach(r=>{ const v = r.value ? escapeHtml(r.value) : '<span style="color:var(--mut)">—</span>'; h+='<tr><td style="white-space:nowrap;color:var(--mut);font-size:12px">'+escapeHtml(r.label)+'</td><td>'+v+'</td></tr>'; });
+    h+='</tbody>'; $('tr_tbl').innerHTML=h;
+  }
+  function renderCands(results, chosenId){
+    const box=$('tr_cands'); box.innerHTML='';
+    if(!results || results.length<=1) return;
+    const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px';
+    const lbl=document.createElement('span'); lbl.className='smalllink'; lbl.style.marginRight='2px'; lbl.textContent='Matches:';
+    wrap.appendChild(lbl);
+    results.slice(0,8).forEach(t=>{
+      const b=document.createElement('button'); b.className='ghost'; b.dataset.id=t.id;
+      const sel = String(t.id)===String(chosenId);
+      b.style.cssText='font-size:12px;padding:4px 8px'+(sel?';border-color:var(--acc);color:var(--acc)':'');
+      b.innerHTML = escapeHtml(t.name) + (t.preferred_common_name? ' <span style="color:var(--mut)">— '+escapeHtml(t.preferred_common_name)+'</span>':'') + ' <span style="color:var(--mut);font-size:11px">('+t.rank+')</span>';
+      b.addEventListener('click', ()=> loadTaxon(t));
+      wrap.appendChild(b);
+    });
+    box.appendChild(wrap);
+  }
+  async function loadTaxon(t){
+    status('Loading names for '+t.name+' …');
+    $('tr_go').disabled=true;
+    try{
+      const d = await fetch(`${API}/taxa?id=${t.id}&all_names=true&per_page=200`).then(r=>r.json());
+      const tax = (d.results&&d.results[0]) || t;
+      const names = tax.names || [];
+      renderCands(STATE.results, tax.id);
+      renderRows(tax, names);
+      const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+tax.rank+')':'');
+      $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
+      $('tr_result').classList.remove('hidden');
+      status('');
+    }catch(e){ status('Could not load names ('+e.message+').', 'err'); }
+    finally{ $('tr_go').disabled=false; }
+  }
+  async function run(){
+    const q=$('tr_input').value.trim(); if(!q) return;
+    status('Searching “'+q+'” …'); $('tr_cands').innerHTML=''; $('tr_result').classList.add('hidden'); $('tr_tbl').innerHTML='';
+    $('tr_go').disabled=true;
+    try{
+      const d = await fetch(`${API}/taxa?q=${encodeURIComponent(q)}&per_page=15&is_active=true`).then(r=>r.json());
+      const res = d.results || [];
+      if(!res.length){ status('No matches found for “'+q+'”. Try a scientific or common name.'); return; }
+      const chosen = res.find(t=> t.name && t.name.toLowerCase()===q.toLowerCase())
+                  || res.find(t=> t.rank==='species')
+                  || res[0];
+      STATE.results = res;
+      renderCands(res, chosen.id);
+      await loadTaxon(chosen);
+    }catch(e){ status('Search failed ('+e.message+').', 'err'); }
+    finally{ $('tr_go').disabled=false; }
+  }
+  $('tr_go').addEventListener('click', run);
+  $('tr_input').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
 })();
 </script>
 </body>

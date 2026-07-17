@@ -1,10 +1,17 @@
 # WildlifeHX Multilingual Species Tools
 
-Two expedition-lecturer tools in one app for building multilingual species lists
-from **eBird trip reports** and **iNaturalist projects**. Designed for polar/nature
-expedition cruises: pick the taxa you care about, tick them on/off, and get names in
-English plus optional German, French, Spanish, Norwegian, Dutch, and Chinese.
+Three expedition-lecturer tools in one app: a **species translator** plus
+multilingual species lists from **eBird trip reports** and **iNaturalist
+projects**. Designed for polar/nature expedition cruises: pick the taxa you care
+about, tick them on/off, and get names in English plus optional German, French,
+Spanish, Norwegian, Dutch, Chinese, and Japanese.
 
+- **Species translator** (default tab) — type any scientific or common name and
+  get it translated into Scientific name, American English, British English (iNat
+  alternates), German, French, Spanish, Norwegian, Dutch, Chinese (Simplified),
+  and Japanese.
+  Runs fully in the browser via the public iNaturalist API. If several taxa
+  match, candidate buttons appear so you can pick the right one.
 - **eBird Trip Report** — paste a trip-report URL/ID; get the trip's species with
   multilingual common names. Needs the small Python backend (`app.py`) because
   ebird.org does not allow direct browser requests.
@@ -21,9 +28,9 @@ library only.
 python3 app.py --serve --port 8000
 ```
 
-Then open <http://localhost:8000>. Both tools work; the eBird tab talks to the
-backend on the same origin (`/api`), the iNaturalist tab talks directly to
-`api.inaturalist.org`.
+Then open <http://localhost:8000>. All three tools work; the eBird tab talks to the
+backend on the same origin (`/api`), the translator and iNaturalist tabs talk
+directly to `api.inaturalist.org`.
 
 > Python 3.7+ is the only requirement. No `pip install` needed.
 
@@ -95,6 +102,20 @@ the browser to `https://api.inaturalist.org/v1` — no backend involved.
   Vertebrates → Order (Rodentia, Carnivora); Plankton → Order; Other → Class; with
   fallbacks (order → class → family → phylum) when a rank is absent. The rank is
   shown next to the name (e.g. `Anatidae (Family)`) since it differs by group.
+- **Species translator** — searches the iNaturalist API with `GET /v1/taxa?q={name}&is_active=true`,
+  prefers an exact scientific-name match, then a species-rank match, then the top
+  result; candidate matches are shown so you can correct a wrong guess. Names come
+  from `GET /v1/taxa?id={id}&all_names=true` (the `names[]` array keyed by locale).
+  - **American English** = iNaturalist's preferred English name (for birds this
+    generally follows the Clements/eBird-style name).
+  - **British English (iNat alternates)** = the other distinct English names
+    iNaturalist lists, which include regional forms such as *Great Northern Diver*
+    (vs *Common Loon*). iNaturalist does **not** tag US vs UK English, so this column
+    is a best-effort list of alternate English names and is left blank where none is
+    listed; for some taxa (e.g. redpolls) it can include names of related species,
+    so treat it as a cue to double-check rather than authoritative.
+  - Other languages: `de`, `fr`, `es`, `nb` (Norwegian Bokmål), `nl`, `zh-CN`
+    (Simplified Chinese, falling back to `zh`), `ja` (Japanese).
 
 ### Attribution
 
