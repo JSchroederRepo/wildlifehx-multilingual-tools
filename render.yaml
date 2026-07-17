@@ -1,0 +1,11 @@
+# Render Blueprint — deploy the combined app (eBird backend + iNaturalist client-side).
+# One-click deploy: https://render.com/deploy?repo=https://github.com/JSchroederRepo/wildlifehx-multilingual-tools
+services:
+  - type: web
+    name: wildlifehx-multilingual-tools
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python3 app.py --serve --port $PORT"
+    autoDeploy: true
+    healthCheckPath: /
