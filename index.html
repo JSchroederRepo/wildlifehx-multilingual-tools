@@ -134,6 +134,7 @@
     <div class="card">
       <div class="opts">
         <label class="opt"><input type="checkbox" id="in_optcount" checked> Include observation counts</label>
+        <label class="opt"><input type="checkbox" id="in_opttaxon" checked> Include higher taxon (family/order)</label>
         <span class="opt">Sort by
           <select id="in_sortsel">
             <option value="cat">group, then A–Z</option>
@@ -169,6 +170,7 @@ document.querySelectorAll('.tab').forEach(t => {
 });
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
 
 /* ====================== eBird tool ====================== */
 (function(){
@@ -292,6 +294,28 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
     for(const id of PLANKTON_IDS){ if(anc.has(id)) return 'Plankton'; }
     return 'Other';
   }
+  // Preference order for the "Higher taxon" column, by category. The first ancestor
+  // found at one of these ranks is used; e.g. birds/plants prefer Family (Anatidae,
+  // Asteraceae), insects prefer Order (Lepidoptera, Coleoptera).
+  const HIGHER_TAXON_PREFS = {
+    Plants:['family','order','class','phylum'],
+    Birds:['family','order','class','phylum'],
+    Insects:['order','family','class','phylum'],
+    Vertebrates:['order','family','class','phylum'],
+    Plankton:['order','class','family','phylum'],
+    Other:['class','phylum','order','family']
+  };
+  function pickHigherTaxon(ancestorIds, byId, category){
+    const prefs=HIGHER_TAXON_PREFS[category]||HIGHER_TAXON_PREFS.Other;
+    const byRank={};
+    for(const id of (ancestorIds||[])){
+      const t=byId[id]; if(!t||!t.rank||t.rank_level==null) continue;
+      if(t.rank_level<30||t.rank_level>60) continue; // family(30)..phylum(60); skip genus/species/kingdom
+      if(!byRank[t.rank]) byRank[t.rank]=t.name;
+    }
+    for(const r of prefs){ if(byRank[r]) return {name:byRank[r], rank:r}; }
+    return null;
+  }
   function parseProjectInput(raw){
     let s=(raw||'').trim(); if(!s) return null;
     const qIdx=s.indexOf('?');
@@ -328,6 +352,23 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
     }
     return byId;
   }
+  // Fetch the ancestor taxa (names + ranks) needed to label the "Higher taxon" column.
+  // Species details carry ancestor_ids but not the ancestor names; resolve them here.
+  async function fetchAncestors(taxa, byId, onProgress){
+    const have=new Set(Object.keys(byId).map(Number));
+    const want=[]; const seen=new Set();
+    for(const t of taxa){
+      const anc=(byId[t.taxon_id]&&byId[t.taxon_id].ancestor_ids)||t.ancestor_ids||[];
+      for(const id of anc){ const n=Number(id); if(n && !have.has(n) && !seen.has(n)){ seen.add(n); want.push(n); } }
+    }
+    const BATCH=100;
+    for(let i=0;i<want.length;i+=BATCH){
+      const chunk=want.slice(i,i+BATCH);
+      onProgress('Fetching higher taxa batch '+Math.floor(i/BATCH+1)+' of '+Math.ceil(want.length/BATCH)+' …', i, want.length);
+      const d=await fetchJSON(API+'/taxa?id='+chunk.join(',')+'&per_page=200');
+      for(const t of (d.results||[])){ byId[t.id]=t; }
+    }
+  }
   function pickName(taxon, locales){
     const names=(taxon&&taxon.names)||[];
     for(const loc of locales){
@@ -344,7 +385,10 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
       let english=detail.preferred_common_name||t.english_name||(names?pickName({names},['en']):'')||'';
       const row={scientific_name:detail.name||t.scientific_name, english_name:english, obs_count:t.count, _ancestor:detail.ancestor_ids||t.ancestor_ids, _iconic:detail.iconic_taxon_name||t.iconic};
       for(const l of ALL_LANGS){ let name=names?pickName({names},l.locales):''; row[l.key]=name||''; if(l.cjk){ const simplified=names&&names.some(n=>n.locale==='zh-CN'||n.locale==='zh-Hans'); row.chinese_is_fallback=!!name&&!simplified; } }
-      row.category=classify(row._iconic, row._ancestor, t.taxon_id); rows.push(row);
+      row.category=classify(row._iconic, row._ancestor, t.taxon_id);
+      const ht=pickHigherTaxon(row._ancestor, byId, row.category);
+      row.higher_taxon=ht?ht.name:''; row.higher_rank=ht?ht.rank:'';
+      rows.push(row);
     }
     return rows;
   }
@@ -375,7 +419,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
       list.appendChild(div);
     });
   }
-  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; selectedLangs().forEach(l=> cols.push([l.key,l.label])); if($('in_optcount').checked) cols.push(['obs_count','Obs.']); return cols; }
+  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; if($('in_opttaxon').checked) cols.push(['higher_taxon','Higher taxon']); selectedLangs().forEach(l=> cols.push([l.key,l.label])); if($('in_optcount').checked) cols.push(['obs_count','Obs.']); return cols; }
   function visibleRows(){
     if(!LAST) return []; let rows=LAST.rows.filter(r=>CAT_ON[r.category]); const sort=$('in_sortsel').value; rows=rows.slice();
     const sci=(a,b)=> (a.scientific_name||'').localeCompare(b.scientific_name||'');
@@ -394,15 +438,15 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
   }
   function renderTable(){
     const rows=visibleRows(); const cols=colSpec(); let t='<thead><tr>';
-    if($('in_sortsel').value==='cat') t+='<th>Group</th>';
+    if($('in_sortsel').value==='cat') t+='<th>Category</th>';
     cols.forEach(c=> t+='<th>'+c[1]+'</th>'); t+='</tr></thead><tbody>';
-    rows.forEach(r=>{ t+='<tr>'; if($('in_sortsel').value==='cat') t+='<td style="color:var(--mut);font-size:12px;white-space:nowrap">'+r.category+'</td>'; cols.forEach(c=>{ const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
+    rows.forEach(r=>{ t+='<tr>'; if($('in_sortsel').value==='cat') t+='<td style="color:var(--mut);font-size:12px;white-space:nowrap">'+r.category+'</td>'; cols.forEach(c=>{ if(c[0]==='higher_taxon'){ const nm=r.higher_taxon||''; const rk=r.higher_rank?cap(r.higher_rank):''; t+='<td>'+(nm?'<span class="sci">'+escapeHtml(nm)+'</span>'+(rk?' <span style="color:var(--mut);font-size:11px">'+rk+'</span>':''):'')+'</td>'; return; } const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
     t+='</tbody>'; $('in_tbl').innerHTML=t;
   }
   function toDelim(sep){
     const cols=colSpec(); const useGroup=$('in_sortsel').value==='cat';
-    const header=(useGroup?['Group']:[]).concat(cols.map(c=>c[1])).join(sep);
-    const body=visibleRows().map(r=>{ const vals=(useGroup?[r.category]:[]).concat(cols.map(c=>{ let v=(r[c[0]]==null?'':String(r[c[0]])); return sep==='\t'?v:v.replace(/"/g,'""'); })); return vals.map(v=> sep==='\t'?v:('"'+v+'"')).join(sep); }).join('\n');
+    const header=(useGroup?['Category']:[]).concat(cols.map(c=>c[1])).join(sep);
+    const body=visibleRows().map(r=>{ const vals=(useGroup?[r.category]:[]).concat(cols.map(c=>{ let v; if(c[0]==='higher_taxon'){ v=r.higher_taxon?(r.higher_taxon+(r.higher_rank?' ('+cap(r.higher_rank)+')':'')):''; } else { v=(r[c[0]]==null?'':String(r[c[0]])); } return sep==='\t'?v:v.replace(/"/g,'""'); })); return vals.map(v=> sep==='\t'?v:('"'+v+'"')).join(sep); }).join('\n');
     return header+'\n'+body;
   }
   function setProg(done,total){ const bar=$('in_progbar'); const inner=bar.querySelector('i'); if(!total){ bar.classList.add('hidden'); return; } bar.classList.remove('hidden'); inner.style.width=Math.min(100,Math.round(done/Math.max(total,1)*100))+'%'; }
@@ -417,6 +461,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
       const taxa=await fetchAllTaxa(String(project.id), (msg,d,t)=>{ $('in_status').textContent=msg; setProg(d,t); });
       if(!taxa.length) throw new Error('No taxa found in this project.');
       const byId=await fetchNames(taxa, (msg,d,t)=>{ $('in_status').textContent=msg; setProg(d,t); });
+      await fetchAncestors(taxa, byId, (msg,d,t)=>{ $('in_status').textContent=msg; setProg(d,t); });
       LAST={project, meta:{}, rows:buildRows(taxa,byId)}; setProg(0,0); $('in_status').textContent='';
       renderCatPicker(); refresh();
     }catch(e){ $('in_status').className='meta err'; $('in_status').textContent='Error: '+(e.message||e); setProg(0,0); }
@@ -425,6 +470,7 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<'
   $('in_go').addEventListener('click', run);
   $('in_url').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
   $('in_optcount').addEventListener('change', ()=>{ if(LAST) refresh(); });
+  $('in_opttaxon').addEventListener('change', ()=>{ if(LAST) refresh(); });
   $('in_sortsel').addEventListener('change', ()=>{ if(LAST) refresh(); });
   $('in_csv').addEventListener('click', ()=>{ const blob=new Blob(["\uFEFF"+toDelim(',')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='inat_project_taxa.csv'; a.click(); });
   $('in_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });

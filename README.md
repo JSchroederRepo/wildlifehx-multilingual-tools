@@ -87,6 +87,14 @@ the browser to `https://api.inaturalist.org/v1` — no backend involved.
   Other) is computed locally in the browser from each taxon's `iconic_taxon_name`
   and `ancestor_ids`; the Plankton bucket matches ancestry against a curated set of
   marine zooplankton/phytoplankton taxon IDs (e.g. Copepoda, Euphausiacea, diatoms).
+- **Higher taxon column** — for each species, a sensible higher-rank group is shown
+  (toggleable via "Include higher taxon"). Ancestor taxa are fetched in batches via
+  `/v1/taxa?id=...` (names + `rank`/`rank_level`) and the first ancestor at a
+  preferred rank is used, by category: Plants → Family (e.g. Pinaceae); Birds →
+  Family (Anatidae, Alcidae); Insects → Order (Lepidoptera, Coleoptera);
+  Vertebrates → Order (Rodentia, Carnivora); Plankton → Order; Other → Class; with
+  fallbacks (order → class → family → phylum) when a rank is absent. The rank is
+  shown next to the name (e.g. `Anatidae (Family)`) since it differs by group.
 
 ### Attribution
 
