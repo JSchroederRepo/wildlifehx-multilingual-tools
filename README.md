@@ -119,7 +119,12 @@ zh-Hans, then Traditional (zh, shown in grey). Norwegian covers `nb`, `nn`, `no`
 ## Test inputs
 
 - eBird trip report: `546161` (a Greenland voyage).
-- iNaturalist project: `city-nature-challenge-2019-the-wasatch` (project id 28039).
+- iNaturalist project: `fngre2618-grand-greenland-mythical-lands-of-the-north-4-18-july-2026`
+  — a Grand Greenland / Mythical Lands of the North expedition (4–18 July 2026).
+  Returns ~196 taxa across all six categories (Plants, Birds, Vertebrates, Insects,
+  Plankton, Other).
+- iNaturalist project: `city-nature-challenge-2019-the-wasatch` (project id 28039) —
+  a larger project (~642 taxa), useful for testing pagination and performance.
 
 ## Notes
 

@@ -419,7 +419,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
       list.appendChild(div);
     });
   }
-  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; if($('in_opttaxon').checked) cols.push(['higher_taxon','Higher taxon']); selectedLangs().forEach(l=> cols.push([l.key,l.label])); if($('in_optcount').checked) cols.push(['obs_count','Obs.']); return cols; }
+  function colSpec(){ const cols=[]; if($('in_opttaxon').checked) cols.push(['higher_taxon','Higher taxon']); cols.push(['scientific_name','Latin name'],['english_name','English']); selectedLangs().forEach(l=> cols.push([l.key,l.label])); if($('in_optcount').checked) cols.push(['obs_count','Obs.']); return cols; }
   function visibleRows(){
     if(!LAST) return []; let rows=LAST.rows.filter(r=>CAT_ON[r.category]); const sort=$('in_sortsel').value; rows=rows.slice();
     const sci=(a,b)=> (a.scientific_name||'').localeCompare(b.scientific_name||'');
