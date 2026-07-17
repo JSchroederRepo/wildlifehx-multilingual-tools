@@ -43,6 +43,59 @@ The iNaturalist tab is pure client-side, so `index.html` alone works on any stat
 host — you can drop it on GitHub Pages with no backend. The eBird tab requires the
 backend, so it will not function on a static-only host.
 
+## Data sources
+
+This tool does not maintain its own species database — it fetches taxonomy and names
+live from the eBird and iNaturalist APIs.
+
+### eBird tab (fetched server-side by `app.py`)
+
+ebird.org does not send CORS headers, so these calls are made from the Python
+backend and proxied to the browser via `/api?trip=<id>`.
+
+- **Trip report data** — eBird's internal trip-report API:
+  - `https://ebird.org/tripreport-internal/v1/taxon-list/{id}` — the species/taxon
+    list for the trip (also the source of the scientific name and the English name).
+  - `…/narrative/{id}`, `…/num-species/{id}`, `…/num-checklists/{id}`,
+    `…/locations/{id}` — trip metadata (description, counts, countries, locations).
+- **Multilingual common names** — the eBird taxonomy, one CSV per locale:
+  `https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}`
+  Locales fetched: `de` (German), `fr` (French), `es` (Spanish), `nl` (Dutch),
+  `no` (Norwegian), `zh_SIM` (Simplified Chinese). Each locale's taxonomy is cached
+  locally as a CSV under `~/.cache/ebird_tripreport_names/ebird_taxonomy_{locale}.csv`
+  for ~30 days, then refreshed automatically.
+
+### iNaturalist tab (fetched client-side, in the browser)
+
+The iNaturalist API sends permissive CORS headers, so these calls go straight from
+the browser to `https://api.inaturalist.org/v1` — no backend involved.
+
+- **Project resolution** — `GET /v1/projects/{slug-or-id}` (falls back to
+  `/v1/projects?q={input}` search if the input isn't a direct ID/slug).
+- **Species counts** — `GET /v1/observations/species_counts?project_id={id}&page={n}&per_page=500`,
+  paginated until all taxa are collected. Each taxon returns `name` (scientific),
+  `rank`, `iconic_taxon_name`, `preferred_common_name` (English), `ancestor_ids`,
+  and an observation `count`.
+- **Vernacular (multilingual) names** — `GET /v1/taxa?id={comma-separated}&all_names=true&locale=en&per_page=200`,
+  fetched in batches of 100 taxon IDs. Each taxon's `names[]` carries
+  `{name, locale, place_id, is_valid}`.
+- **Language → locale mapping** used to pick each name: German `de`; French `fr`;
+  Spanish `es`; Dutch `nl`; Norwegian `nb` → `nn` → `no`; Chinese `zh-CN` → `zh-Hans`
+  → `zh` (Traditional Chinese is shown as a greyed-out fallback when no Simplified
+  name exists). English comes from the taxon's `preferred_common_name`.
+- **Category classification** (Plants / Birds / Vertebrates / Insects / Plankton /
+  Other) is computed locally in the browser from each taxon's `iconic_taxon_name`
+  and `ancestor_ids`; the Plankton bucket matches ancestry against a curated set of
+  marine zooplankton/phytoplankton taxon IDs (e.g. Copepoda, Euphausiacea, diatoms).
+
+### Attribution
+
+- eBird data © [Cornell Lab of Ornithology](https://ebird.org). This tool is
+  independent and not affiliated with or endorsed by the Cornell Lab.
+- iNaturalist data via the [iNaturalist API](https://api.inaturalist.org/v1);
+  observations and photos are governed by iNaturalist's terms and the licenses chosen
+  by each contributor.
+
 ## How the categories are assigned (iNaturalist)
 
 Precedence: Birds (Aves) → Plants (Plantae) → Insects (Insecta) → Vertebrates
