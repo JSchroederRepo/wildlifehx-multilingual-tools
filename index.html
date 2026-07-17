@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WildlifeHX — Multilingual Species Tables</title>
+<style>
+  :root { --bg:#0f1419; --panel:#171d26; --ink:#e6e9ef; --mut:#8a93a3;
+          --acc:#5b9bd5; --line:#2a3340; --ok:#6fbf73; --warn:#e0b341; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  p.sub { color:var(--mut); margin:0 0 16px; font-size:14px; }
+  .tabs { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .tab { background:var(--panel); color:var(--mut); border:1px solid var(--line);
+         border-radius:999px; padding:9px 16px; font-size:14px; font-weight:600;
+         cursor:pointer; }
+  .tab.active { background:var(--acc); color:#06203a; border-color:var(--acc); }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-radius:12px; padding:18px; margin-bottom:18px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  input[type=text] { flex:1 1 320px; min-width:200px; background:#0b0f14;
+          color:var(--ink); border:1px solid var(--line); border-radius:8px;
+          padding:11px 12px; font-size:15px; }
+  input[type=text]:focus { outline:none; border-color:var(--acc); }
+  button { background:var(--acc); color:#06203a; border:none; border-radius:8px;
+          padding:11px 18px; font-size:15px; font-weight:600; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.mini { background:transparent; color:var(--mut); border:1px solid var(--line);
+          border-radius:6px; padding:2px 8px; font-size:13px; line-height:1.4; cursor:pointer; }
+  button.mini:hover { color:var(--ink); border-color:var(--acc); }
+  button.mini:disabled { opacity:.3; cursor:default; }
+  button:disabled { opacity:.5; cursor:default; }
+  .meta { color:var(--mut); font-size:13px; margin:6px 0 0; }
+  .err { color:#ff8a80; }
+  table { width:100%; min-width:720px; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--mut); font-weight:600; font-size:12px; text-transform:uppercase;
+       letter-spacing:.04em; position:sticky; top:0; background:var(--panel); z-index:1; }
+  tr:hover td { background:#1b222d; }
+  .sci { font-style:italic; color:#cdd4df; }
+  .fb { color:var(--mut); font-style:italic; }
+  .tools { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap; align-items:center; }
+  .tag { display:inline-block; background:#0b0f14; border:1px solid var(--line);
+          color:var(--mut); border-radius:999px; padding:2px 10px; font-size:12px; margin-right:6px; }
+  .hidden { display:none; }
+  a { color:var(--acc); }
+  .langtitle, .cattitle, .opttitle { font-size:13px; color:var(--mut); margin:0 0 8px; }
+  .langlist { display:flex; flex-direction:column; gap:6px; }
+  .langitem { display:flex; align-items:center; gap:8px; background:#0b0f14;
+          border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .langitem .grip { color:var(--mut); cursor:grab; user-select:none; font-size:15px; }
+  .langitem .lbl { flex:1; }
+  .langitem input, .catitem input, .opt input { accent-color:var(--acc); width:18px; height:18px; }
+  .langitem.dragover { border-color:var(--acc); }
+  .fixednote { font-size:12px; color:var(--mut); margin-top:8px; }
+  .catgrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:8px; }
+  .catitem { display:flex; align-items:center; gap:8px; background:#0b0f14;
+          border:1px solid var(--line); border-radius:8px; padding:7px 10px; }
+  .catitem .lbl { flex:1; font-size:14px; }
+  .catitem .cnt { color:var(--mut); font-size:12px; }
+  .catitem.dim { opacity:.5; }
+  .opts { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin-top:4px; }
+  .opt { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink); }
+  select { background:#0b0f14; color:var(--ink); border:1px solid var(--line);
+          border-radius:8px; padding:8px 10px; font-size:14px; }
+  select:focus { outline:none; border-color:var(--acc); }
+  .progress { height:6px; background:#0b0f14; border:1px solid var(--line);
+          border-radius:999px; overflow:hidden; margin-top:10px; }
+  .progress > i { display:block; height:100%; width:0; background:var(--acc); transition:width .25s ease; }
+  .smalllink { font-size:12px; color:var(--mut); }
+  .panel { display:none; }
+  .panel.active { display:block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>WildlifeHX — Multilingual Species Tables</h1>
+  <p class="sub">Turn an eBird trip report or an iNaturalist project into a species table with Latin, English and the languages you choose. CSV/TSV export included.</p>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="eb">eBird Trip Report</div>
+    <div class="tab" data-tab="in">iNaturalist Project</div>
+  </div>
+
+  <!-- ================= eBird panel ================= -->
+  <div class="panel active" id="panel-eb">
+    <div class="card">
+      <div class="row">
+        <input id="eb_url" type="text" placeholder="https://ebird.org/tripreport/546161" autofocus>
+        <button id="eb_go">Generate</button>
+      </div>
+      <p class="meta" id="eb_status"></p>
+    </div>
+    <div class="card">
+      <p class="langtitle">Additional languages (tick to include, drag or use ↑/↓ to order):</p>
+      <div id="eb_langlist" class="langlist"></div>
+      <p class="fixednote">Latin (scientific) and English are always shown as the first two columns.</p>
+    </div>
+    <div id="eb_result" class="hidden">
+      <div class="card">
+        <div id="eb_metainfo" class="meta"></div>
+        <div class="tools" style="margin-top:10px">
+          <button class="ghost" id="eb_csv">Download CSV</button>
+          <button class="ghost" id="eb_tsv">Copy TSV (paste into Excel)</button>
+        </div>
+        <div style="overflow:auto; max-height:70vh"><table id="eb_tbl"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= iNaturalist panel ================= -->
+  <div class="panel" id="panel-in">
+    <div class="card">
+      <div class="row">
+        <input id="in_url" type="text" placeholder="https://www.inaturalist.org/projects/city-nature-challenge-2019-the-wasatch">
+        <button id="in_go">Generate</button>
+      </div>
+      <p class="meta" id="in_status"></p>
+      <div class="progress hidden" id="in_progbar"><i></i></div>
+    </div>
+    <div class="card">
+      <p class="cattitle">Taxon groups (tick to include):</p>
+      <div id="in_catgrid" class="catgrid"></div>
+      <p class="fixednote">“Plankton” is a heuristic bucket: it covers curated planktonic groups (copepods, krill, cladocerans, chaetognaths, larvaceans, salps, ctenophores, siphonophores, foraminifera, radiolarians, tintinnids, diatoms, dinoflagellates, coccolithophores, haptophytes) matched against each taxon’s ancestry. Meroplanktonic larvae and other aquatic life may land in “Other”. Fungi, molluscs, arachnids and the rest also fall under “Other”.</p>
+    </div>
+    <div class="card">
+      <p class="langtitle">Additional languages (tick to include, drag or use ↑/↓ to order):</p>
+      <div id="in_langlist" class="langlist"></div>
+      <p class="fixednote">Latin (scientific) and English are always shown as the first two columns.</p>
+    </div>
+    <div class="card">
+      <div class="opts">
+        <label class="opt"><input type="checkbox" id="in_optcount" checked> Include observation counts</label>
+        <span class="opt">Sort by
+          <select id="in_sortsel">
+            <option value="cat">group, then A–Z</option>
+            <option value="sci">scientific name A–Z</option>
+            <option value="obs">observations (high → low)</option>
+          </select>
+        </span>
+      </div>
+    </div>
+    <div id="in_result" class="hidden">
+      <div class="card">
+        <div id="in_metainfo" class="meta"></div>
+        <div class="tools" style="margin-top:10px">
+          <button class="ghost" id="in_csv">Download CSV</button>
+          <button class="ghost" id="in_tsv">Copy TSV (paste into Excel)</button>
+          <span id="in_rowcount" class="smalllink"></span>
+        </div>
+        <div style="overflow:auto; max-height:70vh"><table id="in_tbl"></table></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ====================== tab switching ====================== */
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
+  });
+});
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ====================== eBird tool ====================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  // app.py serves both this page and /api on the same origin, so use a relative path.
+  // Works locally (python3 app.py --serve) and on any host running app.py.
+  const API = '';
+  let LAST = null;
+  const ALL_LANGS = [
+    {key:'german_name',    label:'German',    locale:'de'},
+    {key:'french_name',    label:'French',    locale:'fr'},
+    {key:'spanish_name',   label:'Spanish',   locale:'es'},
+    {key:'dutch_name',     label:'Dutch',     locale:'nl'},
+    {key:'norwegian_name', label:'Norwegian', locale:'no'},
+    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
+  ];
+  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  function selectedLangs(){ return LANGS.filter(l=>l.on); }
+
+  function renderLangPicker(){
+    const list = $('eb_langlist'); list.innerHTML = '';
+    LANGS.forEach((l, i)=>{
+      const div = document.createElement('div'); div.className='langitem'; div.draggable=true; div.dataset.i=i;
+      div.innerHTML = '<span class="grip" title="drag to reorder">≡</span>'+
+        '<input type="checkbox" '+(l.on?'checked':'')+'>'+
+        '<span class="lbl">'+escapeHtml(l.label)+' <span style="color:var(--mut);font-size:12px">('+l.locale+')</span></span>'+
+        '<button class="mini" data-dir="-1" '+(i===0?'disabled':'')+'>↑</button>'+
+        '<button class="mini" data-dir="1" '+(i===LANGS.length-1?'disabled':'')+'>↓</button>';
+      div.querySelector('input').addEventListener('change', e=>{ LANGS[i].on=e.target.checked; refresh(); });
+      div.querySelectorAll('button.mini').forEach(b=> b.addEventListener('click', ()=>{
+        const dir=parseInt(b.dataset.dir,10); const j=i+dir; if(j<0||j>=LANGS.length) return;
+        [LANGS[i],LANGS[j]]=[LANGS[j],LANGS[i]]; renderLangPicker(); refresh();
+      }));
+      div.addEventListener('dragstart', e=>{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(i)); div.style.opacity='0.4'; });
+      div.addEventListener('dragend', ()=>{ div.style.opacity='1'; document.querySelectorAll('.langitem').forEach(x=>x.classList.remove('dragover')); });
+      div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('dragover'); });
+      div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+      div.addEventListener('drop', e=>{ e.preventDefault(); div.classList.remove('dragover'); const from=parseInt(e.dataTransfer.getData('text/plain'),10); const to=i; if(isNaN(from)||from===to) return; const moved=LANGS.splice(from,1)[0]; LANGS.splice(to,0,moved); renderLangPicker(); refresh(); });
+      list.appendChild(div);
+    });
+  }
+  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; selectedLangs().forEach(l=> cols.push([l.key,l.label])); return cols; }
+
+  async function run(){
+    const url=$('eb_url').value.trim(); if(!url) return;
+    $('eb_go').disabled=true; $('eb_status').className='meta';
+    $('eb_status').textContent='Fetching… (first run downloads the eBird taxonomy, ~15 MB across languages, then caches it)';
+    $('eb_result').classList.add('hidden');
+    try{
+      const r=await fetch(API+'/api?trip='+encodeURIComponent(url));
+      if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+      LAST=await r.json(); refresh(); $('eb_status').textContent='';
+    }catch(e){
+      $('eb_status').className='meta err'; $('eb_status').textContent='Error: '+e.message;
+    }finally{ $('eb_go').disabled=false; }
+  }
+  function refresh(){
+    if(!LAST) return; renderMeta(LAST.meta||{}); renderTable(LAST.rows||[]); $('eb_result').classList.remove('hidden');
+  }
+  function renderMeta(m){
+    const bits=[];
+    if(m.num_species!=null) bits.push(m.num_species+' species');
+    if(m.num_other_taxa!=null) bits.push(m.num_other_taxa+' other taxa');
+    if(m.num_checklists!=null) bits.push(m.num_checklists+' checklists');
+    if(m.num_locations!=null) bits.push(m.num_locations+' locations');
+    if(m.countries&&m.countries.length) bits.push(m.countries.join(' / '));
+    let html = bits.length ? '<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>' : '';
+    if(m.narrative) html += '<div style="margin-top:6px">'+escapeHtml(m.narrative)+'</div>';
+    if(m.chinese_fallback_count && selectedLangs().some(l=>l.key==='chinese_name')){
+      html += '<div style="margin-top:6px;color:var(--mut);font-size:12px">Chinese names: '+(m.chinese_native_count||0)+' native; '+(m.chinese_fallback_count||0)+' shown as IOC English fallback (grey italic) for species not occurring in China.</div>';
+    }
+    $('eb_metainfo').innerHTML=html;
+  }
+  function renderTable(rows){
+    const cols=colSpec(); let t='<thead><tr>'; cols.forEach(c=> t+='<th>'+c[1]+'</th>'); t+='</tr></thead><tbody>';
+    rows.forEach(r=>{ t+='<tr>'; cols.forEach(c=>{ const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
+    t+='</tbody>'; $('eb_tbl').innerHTML=t;
+  }
+  function toDelim(sep){
+    const cols=colSpec(); const header=cols.map(c=>c[1]).join(sep);
+    const body=(LAST.rows||[]).map(r=> cols.map(c=>{ let v=(r[c[0]]==null?'':String(r[c[0]])); return sep==='\t'?v:v.replace(/"/g,'""'); }).map(v=> sep==='\t'?v:('"'+v+'"')).join(sep)).join('\n');
+    return header+'\n'+body;
+  }
+  $('eb_go').addEventListener('click', run);
+  $('eb_url').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  $('eb_csv').addEventListener('click', ()=>{ const blob=new Blob(["\uFEFF"+toDelim(',')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tripreport_species.csv'; a.click(); });
+  $('eb_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });
+  function flash(msg){ const b=$('eb_tsv'); const o=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=o,1200); }
+  renderLangPicker();
+})();
+
+/* ====================== iNaturalist tool ====================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  const API = 'https://api.inaturalist.org/v1';
+  let LAST = null;
+
+  const PLANKTON_IDS = new Set([121643,85507,153112,85532,68305,151827,129725,152874,51104,51508,152823,348288,211193,1276261,123880,130225,828871,51845,152021]);
+  const CHONDRICHTHYES = 196614;
+  const VERTEBRATE_ICONIC = new Set(['Mammalia','Reptilia','Amphibia','Actinopterygii']);
+  const ALL_LANGS = [
+    {key:'german_name',    label:'German',    locales:['de']},
+    {key:'french_name',    label:'French',    locales:['fr']},
+    {key:'spanish_name',   label:'Spanish',   locales:['es']},
+    {key:'norwegian_name', label:'Norwegian', locales:['nb','nn','no']},
+    {key:'dutch_name',     label:'Dutch',     locales:['nl']},
+    {key:'chinese_name',   label:'Chinese',   locales:['zh-CN','zh-Hans','zh'], cjk:true},
+  ];
+  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  const CATS = [{key:'Plants',label:'Plants'},{key:'Birds',label:'Birds'},{key:'Vertebrates',label:'Vertebrates'},{key:'Insects',label:'Insects'},{key:'Plankton',label:'Plankton'},{key:'Other',label:'Other'}];
+  let CAT_ON = {}; CATS.forEach(c=>CAT_ON[c.key]=true);
+  function selectedLangs(){ return LANGS.filter(l=>l.on); }
+
+  function classify(iconic, ancestorIds, selfId){
+    if(iconic==='Aves') return 'Birds';
+    if(iconic==='Plantae') return 'Plants';
+    if(iconic==='Insecta') return 'Insects';
+    if(VERTEBRATE_ICONIC.has(iconic)) return 'Vertebrates';
+    const anc = new Set(ancestorIds||[]); if(selfId) anc.add(selfId);
+    if(anc.has(CHONDRICHTHYES)) return 'Vertebrates';
+    for(const id of PLANKTON_IDS){ if(anc.has(id)) return 'Plankton'; }
+    return 'Other';
+  }
+  function parseProjectInput(raw){
+    let s=(raw||'').trim(); if(!s) return null;
+    const qIdx=s.indexOf('?');
+    if(qIdx>=0){ const params=new URLSearchParams(s.slice(qIdx+1)); if(params.get('project_id')) return params.get('project_id'); }
+    try{ const u=new URL(s.startsWith('http')?s:('https://'+s)); const parts=u.pathname.split('/').filter(Boolean); const i=parts.indexOf('projects'); if(i>=0&&parts[i+1]) return decodeURIComponent(parts[i+1]); }catch(e){}
+    return s;
+  }
+  async function fetchJSON(url){ const r=await fetch(url,{headers:{'Accept':'application/json'}}); if(!r.ok){ const t=await r.text().catch(()=> ''); throw new Error(t||('HTTP '+r.status)); } return r.json(); }
+  async function resolveProject(input){
+    let d=await fetchJSON(API+'/projects/'+encodeURIComponent(input));
+    if(d.results&&d.results.length) return d.results[0];
+    d=await fetchJSON(API+'/projects?q='+encodeURIComponent(input)+'&per_page=1');
+    if(d.results&&d.results.length) return d.results[0];
+    throw new Error('Project not found: '+input);
+  }
+  async function fetchAllTaxa(projectId, onProgress){
+    const all=[]; const PER=500; let page=1, total=Infinity;
+    while(all.length<total && page<50){
+      onProgress('Loading taxa page '+page+' …', all.length, Math.max(total,all.length));
+      const d=await fetchJSON(API+'/observations/species_counts?project_id='+projectId+'&page='+page+'&per_page='+PER);
+      total=d.total_results??total; const res=d.results||[]; if(!res.length) break;
+      for(const r of res){ const t=r.taxon||{}; all.push({taxon_id:t.id,scientific_name:t.name||'',english_name:t.preferred_common_name||'',iconic:t.iconic_taxon_name||'',ancestor_ids:t.ancestor_ids||[],count:r.count||0}); }
+      if(res.length<PER) break; page++;
+    }
+    return all;
+  }
+  async function fetchNames(taxa, onProgress){
+    const ids=taxa.map(t=>t.taxon_id).filter(Boolean); const BATCH=100; const byId={};
+    for(let i=0;i<ids.length;i+=BATCH){
+      const chunk=ids.slice(i,i+BATCH);
+      onProgress('Fetching names batch '+Math.floor(i/BATCH+1)+' of '+Math.ceil(ids.length/BATCH)+' …', i, ids.length);
+      const d=await fetchJSON(API+'/taxa?id='+chunk.join(',')+'&all_names=true&locale=en&per_page=200');
+      for(const t of (d.results||[])){ byId[t.id]=t; }
+    }
+    return byId;
+  }
+  function pickName(taxon, locales){
+    const names=(taxon&&taxon.names)||[];
+    for(const loc of locales){
+      const cands=names.filter(n=>n.locale===loc); if(!cands.length) continue;
+      const best=cands.find(n=>n.place_id==null&&n.is_valid)||cands.find(n=>n.is_valid)||cands[0];
+      return best.name||null;
+    }
+    return null;
+  }
+  function buildRows(taxa, byId){
+    const rows=[];
+    for(const t of taxa){
+      const detail=byId[t.taxon_id]||{}; const names=detail.names||null;
+      let english=detail.preferred_common_name||t.english_name||(names?pickName({names},['en']):'')||'';
+      const row={scientific_name:detail.name||t.scientific_name, english_name:english, obs_count:t.count, _ancestor:detail.ancestor_ids||t.ancestor_ids, _iconic:detail.iconic_taxon_name||t.iconic};
+      for(const l of ALL_LANGS){ let name=names?pickName({names},l.locales):''; row[l.key]=name||''; if(l.cjk){ const simplified=names&&names.some(n=>n.locale==='zh-CN'||n.locale==='zh-Hans'); row.chinese_is_fallback=!!name&&!simplified; } }
+      row.category=classify(row._iconic, row._ancestor, t.taxon_id); rows.push(row);
+    }
+    return rows;
+  }
+  function catCounts(rows){ const c={}; CATS.forEach(x=>c[x.key]=0); rows.forEach(r=>{ c[r.category]=(c[r.category]||0)+1; }); return c; }
+
+  function renderCatPicker(){
+    const counts=LAST?catCounts(LAST.rows):null; const grid=$('in_catgrid'); grid.innerHTML='';
+    CATS.forEach(c=>{
+      const on=CAT_ON[c.key]; const n=counts?counts[c.key]:0;
+      const div=document.createElement('div'); div.className='catitem'+(on?'':' dim');
+      div.innerHTML='<input type="checkbox" '+(on?'checked':'')+'><span class="lbl">'+c.label+'</span><span class="cnt">'+(counts!=null?n:'')+'</span>';
+      div.querySelector('input').addEventListener('change', e=>{ CAT_ON[c.key]=e.target.checked; renderCatPicker(); if(LAST) refresh(); });
+      grid.appendChild(div);
+    });
+  }
+  function renderLangPicker(){
+    const list=$('in_langlist'); list.innerHTML='';
+    LANGS.forEach((l,i)=>{
+      const div=document.createElement('div'); div.className='langitem'; div.draggable=true; div.dataset.i=i;
+      div.innerHTML='<span class="grip" title="drag to reorder">≡</span><input type="checkbox" '+(l.on?'checked':'')+'><span class="lbl">'+escapeHtml(l.label)+'</span><button class="mini" data-dir="-1" '+(i===0?'disabled':'')+'>↑</button><button class="mini" data-dir="1" '+(i===LANGS.length-1?'disabled':'')+'>↓</button>';
+      div.querySelector('input').addEventListener('change', e=>{ LANGS[i].on=e.target.checked; refresh(); });
+      div.querySelectorAll('button.mini').forEach(b=> b.addEventListener('click', ()=>{ const dir=parseInt(b.dataset.dir,10); const j=i+dir; if(j<0||j>=LANGS.length) return; [LANGS[i],LANGS[j]]=[LANGS[j],LANGS[i]]; renderLangPicker(); refresh(); }));
+      div.addEventListener('dragstart', e=>{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(i)); div.style.opacity='0.4'; });
+      div.addEventListener('dragend', ()=>{ div.style.opacity='1'; document.querySelectorAll('.langitem').forEach(x=>x.classList.remove('dragover')); });
+      div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('dragover'); });
+      div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+      div.addEventListener('drop', e=>{ e.preventDefault(); div.classList.remove('dragover'); const from=parseInt(e.dataTransfer.getData('text/plain'),10); const to=i; if(isNaN(from)||from===to) return; const moved=LANGS.splice(from,1)[0]; LANGS.splice(to,0,moved); renderLangPicker(); refresh(); });
+      list.appendChild(div);
+    });
+  }
+  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; selectedLangs().forEach(l=> cols.push([l.key,l.label])); if($('in_optcount').checked) cols.push(['obs_count','Obs.']); return cols; }
+  function visibleRows(){
+    if(!LAST) return []; let rows=LAST.rows.filter(r=>CAT_ON[r.category]); const sort=$('in_sortsel').value; rows=rows.slice();
+    const sci=(a,b)=> (a.scientific_name||'').localeCompare(b.scientific_name||'');
+    if(sort==='sci') rows.sort(sci); else if(sort==='obs') rows.sort((a,b)=> (b.obs_count||0)-(a.obs_count||0)||sci(a,b)); else rows.sort((a,b)=> a.category.localeCompare(b.category)||sci(a,b));
+    return rows;
+  }
+  function refresh(){ if(!LAST) return; renderMeta(); renderTable(); $('in_result').classList.remove('hidden'); }
+  function renderMeta(){
+    const m=LAST.meta||{}, p=LAST.project||{}; const bits=[]; bits.push((LAST.rows.length)+' taxa');
+    const cc=catCounts(LAST.rows); CATS.forEach(c=>{ if(cc[c.key]) bits.push(c.label+': '+cc[c.key]); });
+    let html='<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>';
+    if(p.title) html+='<div style="margin-top:6px"><a href="https://www.inaturalist.org/projects/'+(p.slug||p.id)+'" target="_blank" rel="noopener">'+escapeHtml(p.title)+'</a></div>';
+    const sel=selectedLangs();
+    if(sel.some(l=>l.cjk)){ const rows=LAST.rows; const withChinese=rows.filter(r=>r.chinese_name).length; const nat=rows.filter(r=>r.chinese_name&&!r.chinese_is_fallback).length; const fb=rows.filter(r=>r.chinese_name&&r.chinese_is_fallback).length; const missing=rows.length-withChinese; html+='<div style="margin-top:6px;color:var(--mut);font-size:12px">Chinese names: '+nat+' simplified; '+fb+' traditional fallback (grey italic); '+missing+' blank.</div>'; }
+    $('in_metainfo').innerHTML=html; $('in_rowcount').textContent=visibleRows().length+' shown';
+  }
+  function renderTable(){
+    const rows=visibleRows(); const cols=colSpec(); let t='<thead><tr>';
+    if($('in_sortsel').value==='cat') t+='<th>Group</th>';
+    cols.forEach(c=> t+='<th>'+c[1]+'</th>'); t+='</tr></thead><tbody>';
+    rows.forEach(r=>{ t+='<tr>'; if($('in_sortsel').value==='cat') t+='<td style="color:var(--mut);font-size:12px;white-space:nowrap">'+r.category+'</td>'; cols.forEach(c=>{ const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
+    t+='</tbody>'; $('in_tbl').innerHTML=t;
+  }
+  function toDelim(sep){
+    const cols=colSpec(); const useGroup=$('in_sortsel').value==='cat';
+    const header=(useGroup?['Group']:[]).concat(cols.map(c=>c[1])).join(sep);
+    const body=visibleRows().map(r=>{ const vals=(useGroup?[r.category]:[]).concat(cols.map(c=>{ let v=(r[c[0]]==null?'':String(r[c[0]])); return sep==='\t'?v:v.replace(/"/g,'""'); })); return vals.map(v=> sep==='\t'?v:('"'+v+'"')).join(sep); }).join('\n');
+    return header+'\n'+body;
+  }
+  function setProg(done,total){ const bar=$('in_progbar'); const inner=bar.querySelector('i'); if(!total){ bar.classList.add('hidden'); return; } bar.classList.remove('hidden'); inner.style.width=Math.min(100,Math.round(done/Math.max(total,1)*100))+'%'; }
+  async function run(){
+    const raw=$('in_url').value.trim(); if(!raw) return; const input=parseProjectInput(raw);
+    if(!input){ $('in_status').className='meta err'; $('in_status').textContent='Could not read a project URL, ID or slug.'; return; }
+    $('in_go').disabled=true; $('in_status').className='meta'; $('in_result').classList.add('hidden'); LAST=null; renderCatPicker();
+    try{
+      $('in_status').textContent='Resolving project…';
+      const project=await resolveProject(input);
+      $('in_status').textContent='Loading taxa for "'+project.title+'" …';
+      const taxa=await fetchAllTaxa(String(project.id), (msg,d,t)=>{ $('in_status').textContent=msg; setProg(d,t); });
+      if(!taxa.length) throw new Error('No taxa found in this project.');
+      const byId=await fetchNames(taxa, (msg,d,t)=>{ $('in_status').textContent=msg; setProg(d,t); });
+      LAST={project, meta:{}, rows:buildRows(taxa,byId)}; setProg(0,0); $('in_status').textContent='';
+      renderCatPicker(); refresh();
+    }catch(e){ $('in_status').className='meta err'; $('in_status').textContent='Error: '+(e.message||e); setProg(0,0); }
+    finally{ $('in_go').disabled=false; }
+  }
+  $('in_go').addEventListener('click', run);
+  $('in_url').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  $('in_optcount').addEventListener('change', ()=>{ if(LAST) refresh(); });
+  $('in_sortsel').addEventListener('change', ()=>{ if(LAST) refresh(); });
+  $('in_csv').addEventListener('click', ()=>{ const blob=new Blob(["\uFEFF"+toDelim(',')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='inat_project_taxa.csv'; a.click(); });
+  $('in_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });
+  function flash(msg){ const b=$('in_tsv'); const o=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=o,1200); }
+  renderLangPicker(); renderCatPicker();
+})();
+</script>
+</body>
+</html>
