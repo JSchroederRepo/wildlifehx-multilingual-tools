@@ -115,7 +115,7 @@
   <div class="panel" id="panel-in">
     <div class="card">
       <div class="row">
-        <input id="in_url" type="text" placeholder="https://www.inaturalist.org/projects/city-nature-challenge-2019-the-wasatch">
+        <input id="in_url" type="text" value="https://www.inaturalist.org/projects/fngre2618-grand-greenland-mythical-lands-of-the-north-4-18-july-2026" placeholder="iNaturalist project URL or slug">
         <button id="in_go">Generate</button>
       </div>
       <p class="meta" id="in_status"></p>
@@ -469,6 +469,11 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   }
   $('in_go').addEventListener('click', run);
   $('in_url').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  // Auto-load the default project the first time the iNaturalist tab is opened.
+  let inatAutoloaded=false;
+  document.querySelector('.tab[data-tab="in"]').addEventListener('click', ()=>{
+    if(!inatAutoloaded && $('in_url').value.trim()){ inatAutoloaded=true; run(); }
+  });
   $('in_optcount').addEventListener('change', ()=>{ if(LAST) refresh(); });
   $('in_opttaxon').addEventListener('change', ()=>{ if(LAST) refresh(); });
   $('in_sortsel').addEventListener('change', ()=>{ if(LAST) refresh(); });
