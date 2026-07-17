@@ -256,7 +256,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     if(m.num_other_taxa!=null) bits.push(m.num_other_taxa+' other taxa');
     if(m.num_checklists!=null) bits.push(m.num_checklists+' checklists');
     if(m.num_locations!=null) bits.push(m.num_locations+' locations');
-    if(m.countries&&m.countries.length) bits.push(m.countries.join(' / '));
+    if(m.countries&&m.countries.length) bits.push(escapeHtml(m.countries.join(' / ')));
     let html = bits.length ? '<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>' : '';
     if(m.narrative) html += '<div style="margin-top:6px">'+escapeHtml(m.narrative)+'</div>';
     if(m.chinese_fallback_count && selectedLangs().some(l=>l.key==='chinese_name')){
@@ -460,7 +460,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     const rows=visibleRows(); const cols=colSpec(); let t='<thead><tr>';
     if($('in_sortsel').value==='cat') t+='<th>Category</th>';
     cols.forEach(c=> t+='<th>'+c[1]+'</th>'); t+='</tr></thead><tbody>';
-    rows.forEach(r=>{ t+='<tr>'; if($('in_sortsel').value==='cat') t+='<td style="color:var(--mut);font-size:12px;white-space:nowrap">'+r.category+'</td>'; cols.forEach(c=>{ if(c[0]==='higher_taxon'){ const nm=r.higher_taxon||''; const rk=r.higher_rank?cap(r.higher_rank):''; t+='<td>'+(nm?'<span class="sci">'+escapeHtml(nm)+'</span>'+(rk?' <span style="color:var(--mut);font-size:11px">'+rk+'</span>':''):'')+'</td>'; return; } const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
+    rows.forEach(r=>{ t+='<tr>'; if($('in_sortsel').value==='cat') t+='<td style="color:var(--mut);font-size:12px;white-space:nowrap">'+r.category+'</td>'; cols.forEach(c=>{ if(c[0]==='higher_taxon'){ const nm=r.higher_taxon||''; const rk=r.higher_rank?cap(r.higher_rank):''; t+='<td>'+(nm?'<span class="sci">'+escapeHtml(nm)+'</span>'+(rk?' <span style="color:var(--mut);font-size:11px">'+escapeHtml(rk)+'</span>':''):'')+'</td>'; return; } const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='</tr>'; });
     t+='</tbody>'; $('in_tbl').innerHTML=t;
   }
   function toDelim(sep){
@@ -553,7 +553,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
       const b=document.createElement('button'); b.className='ghost'; b.dataset.id=t.id;
       const sel = String(t.id)===String(chosenId);
       b.style.cssText='font-size:12px;padding:4px 8px'+(sel?';border-color:var(--acc);color:var(--acc)':'');
-      b.innerHTML = escapeHtml(t.name) + (t.preferred_common_name? ' <span style="color:var(--mut)">— '+escapeHtml(t.preferred_common_name)+'</span>':'') + ' <span style="color:var(--mut);font-size:11px">('+t.rank+')</span>';
+      b.innerHTML = escapeHtml(t.name) + (t.preferred_common_name? ' <span style="color:var(--mut)">— '+escapeHtml(t.preferred_common_name)+'</span>':'') + ' <span style="color:var(--mut);font-size:11px">('+escapeHtml(String(t.rank))+')</span>';
       b.addEventListener('click', ()=> loadTaxon(t));
       wrap.appendChild(b);
     });
@@ -568,7 +568,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
       const names = tax.names || [];
       renderCands(STATE.results, tax.id);
       renderRows(tax, names);
-      const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+tax.rank+')':'');
+      const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+escapeHtml(String(tax.rank))+')':'');
       $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
       $('tr_result').classList.remove('hidden');
       status('');
