@@ -72,6 +72,11 @@
   .progress > i { display:block; height:100%; width:0; background:var(--acc); transition:width .25s ease; }
   .smalllink { font-size:12px; color:var(--mut); }
   .foot { margin-top:18px; padding-top:10px; border-top:1px solid var(--line); color:var(--mut); font-size:12px; line-height:1.5; }
+  .contactbtn { font:inherit; font-size:12px; color:var(--mut); background:transparent; border:1px solid var(--line); border-radius:6px; padding:3px 10px; cursor:pointer; }
+  .contactbtn:hover { color:var(--ink); border-color:var(--acc); }
+  .contactwrap { margin-top:8px; }
+  .contact_addr { font-size:12px; word-break:break-all; }
+  .copybtn { margin-left:6px; font:inherit; font-size:11px; color:var(--mut); background:transparent; border:none; cursor:pointer; text-decoration:underline; }
   /* translator name tiles */
   .ngrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; }
   .ntile { background:#0b0f14; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
@@ -224,11 +229,10 @@
       </div>
     </div>
   </div>
-  <footer class="foot">© 2026 Julia Schroeder. eBird data © <a href="https://ebird.org" target="_blank" rel="noopener">Cornell Lab of Ornithology</a>; iNaturalist data © <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist contributors</a>.</footer>
+  <footer class="foot"><div>© 2026 Julia Schroeder. eBird data © <a href="https://ebird.org" target="_blank" rel="noopener">Cornell Lab of Ornithology</a>; iNaturalist data © <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist contributors</a>.</div><div class="contactwrap"><button id="contact_btn" class="contactbtn" type="button" title="Reveal a contact email">Contact</button></div></footer>
 </div>
 
 <script>
-/* ====================== tab switching ====================== */
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
@@ -240,6 +244,24 @@ document.querySelectorAll('.tab').forEach(t => {
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
+
+/* ====================== contact (click-to-reveal, bot-resistant) ====================== */
+(function(){
+  // address stored only as char codes — never appears as readable text or a mailto: in the page source
+  const _c=[106,117,108,105,97,46,115,99,104,114,111,101,100,101,114,43,119,105,108,100,108,105,102,101,104,120,97,112,112,64,103,109,97,105,108,46,99,111,109];
+  const btn=document.getElementById('contact_btn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    const addr=_c.map(c=>String.fromCharCode(c)).join('');
+    const wrap=btn.parentElement;
+    wrap.innerHTML='<a class="contact_addr" href="mailto:'+encodeURIComponent(addr)+'?subject='+encodeURIComponent('WildlifeHX species tools')+'">'+addr+'</a><button class="copybtn" type="button">copy</button>';
+    const cb=wrap.querySelector('.copybtn');
+    cb.addEventListener('click', function(){
+      try{ navigator.clipboard.writeText(addr); }catch(e){}
+      this.textContent='copied';
+    });
+  });
+})();
 
 /* ====================== eBird tool ====================== */
 (function(){
