@@ -158,8 +158,8 @@ zh-Hans, then Traditional (zh, shown in grey). Norwegian covers `nb`, `nn`, `no`
 - iNaturalist project: `fngre2618-grand-greenland-mythical-lands-of-the-north-4-18-july-2026`
   — a Grand Greenland / Mythical Lands of the North expedition (4–18 July 2026).
   Returns ~196 taxa across all six categories (Plants, Birds, Vertebrates, Insects,
-  Plankton, Other). This is the **default project**: the input is pre-filled with it and
-  it auto-loads the first time the iNaturalist tab is opened.
+  Plankton, Other). Paste this URL or slug into the iNaturalist input to load it
+  (the input opens empty — no project is pre-filled or auto-loaded).
 - iNaturalist project: `city-nature-challenge-2019-the-wasatch` (project id 28039) —
   a larger project (~642 taxa), useful for testing pagination and performance.
 
