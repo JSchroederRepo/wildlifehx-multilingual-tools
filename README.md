@@ -8,10 +8,11 @@ Spanish, Norwegian, Dutch, Chinese, and Japanese.
 
 - **Species translator** (default tab) — type any scientific or common name and
   get it translated into Scientific name, American English, British English (iNat
-  alternates), German, French, Spanish, Norwegian, Dutch, Chinese (Simplified),
-  and Japanese.
-  Runs fully in the browser via the public iNaturalist API. If several taxa
-  match, candidate buttons appear so you can pick the right one.
+  alternates), German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch,
+  Polish, Russian, Chinese (Simplified), and Japanese. Results show as a compact
+  tile grid (two columns on phones) for a quick one-glance overview. Runs fully in
+  the browser via the public iNaturalist API. If several taxa match, candidate
+  buttons appear so you can pick the right one.
 - **eBird Trip Report** — paste a trip-report URL/ID; get the trip's species with
   multilingual common names. Needs the small Python backend (`app.py`) because
   ebird.org does not allow direct browser requests.
@@ -114,8 +115,22 @@ the browser to `https://api.inaturalist.org/v1` — no backend involved.
     is a best-effort list of alternate English names and is left blank where none is
     listed; for some taxa (e.g. redpolls) it can include names of related species,
     so treat it as a cue to double-check rather than authoritative.
-  - Other languages: `de`, `fr`, `es`, `nb` (Norwegian Bokmål), `nl`, `zh-CN`
-    (Simplified Chinese, falling back to `zh`), `ja` (Japanese).
+  - Other languages: `de`, `fr`, `es`, `nb` (Norwegian Bokmål), `da`, `sv`, `fi`,
+    `nl`, `pl`, `ru`, `zh-CN` (Simplified Chinese, falling back to `zh`), `ja`
+    (Japanese).
+
+### Per-supergroup totals
+
+Both species tables show a per-supergroup summary above the table:
+
+- **iNaturalist** — a small *Supergroup / Taxa / Observations* table (Plants,
+  Birds, Vertebrates, Insects, Plankton, Other) with a Total row. “Observations”
+  is iNaturalist’s record count for the project, not a count of individual
+  organisms; “Taxa” is used (not “species”) because some IDs are coarser than
+  species (e.g. a genus or class).
+- **eBird** — a headline line: *Birds: N taxa · M individuals* (eBird trip reports
+  are birds-only; `M` sums each taxon’s `numIndividuals`, reported as “individuals
+  not reported” when the trip has no counts).
 
 ### Attribution
 

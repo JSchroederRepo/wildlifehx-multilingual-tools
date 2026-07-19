@@ -71,6 +71,23 @@
           border-radius:999px; overflow:hidden; margin-top:10px; }
   .progress > i { display:block; height:100%; width:0; background:var(--acc); transition:width .25s ease; }
   .smalllink { font-size:12px; color:var(--mut); }
+  /* translator name tiles */
+  .ngrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; }
+  .ntile { background:#0b0f14; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .ntile.feat { grid-column:1/-1; }
+  .ntile .nlab { color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .ntile .nval { font-size:15px; margin-top:2px; overflow-wrap:anywhere; }
+  .ntile.sci .nval { font-style:italic; font-size:16px; }
+  details.fixednote { margin-top:8px; }
+  details.fixednote summary { color:var(--mut); font-size:12px; cursor:pointer; outline:none; }
+  details.fixednote p { margin:6px 0 0; font-size:12px; color:var(--mut); line-height:1.45; }
+  /* per-supergroup summary */
+  .sgtable { border-collapse:collapse; font-size:13px; width:auto; min-width:0; margin-top:8px; }
+  .sgtable caption { caption-side:top; text-align:left; color:var(--mut); font-size:11px; margin-bottom:4px; }
+  .sgtable th, .sgtable td { padding:5px 14px 5px 0; text-align:right; white-space:nowrap; }
+  .sgtable th:first-child, .sgtable td:first-child { text-align:left; }
+  .sgtable .sgtot td { font-weight:600; border-top:1px solid var(--line); }
+  .sgnote { color:var(--mut); font-size:11px; margin-top:4px; line-height:1.4; }
   .panel { display:none; }
   .panel.active { display:block; }
 
@@ -94,6 +111,9 @@
     .opt { font-size:13px; }
     table { font-size:13px; }
     th, td { padding:6px 8px; }
+    .ngrid { grid-template-columns:1fr 1fr; }
+    .ntile .nval { font-size:14px; }
+    .sgtable { font-size:12px; }
     #tr_tbl { min-width:0; }            /* translator 2-col table fits without sideways scroll */
     .fixednote { font-size:11px; }
     .tools { gap:6px; }
@@ -126,8 +146,8 @@
     <div id="tr_result" class="hidden">
       <div class="card">
         <div id="tr_metainfo" class="meta"></div>
-        <div style="overflow:auto; max-height:70vh"><table id="tr_tbl"></table></div>
-        <p class="fixednote">American English uses iNaturalist's preferred English name (for birds this generally follows the Clements/eBird-style name). iNaturalist does not tag US vs UK English; “British English (iNat alternates)” lists the other distinct English names it carries (e.g. Great Northern Diver) and may include alternates that are not specifically British — treat it as a cue to double-check. If the wrong species appears, pick another match above.</p>
+        <div id="tr_tbl" class="ngrid"></div>
+        <details class="fixednote"><summary>How English &amp; language names are chosen</summary><p>American English uses iNaturalist's preferred English name (for birds this generally follows the Clements/eBird-style name). iNaturalist does not tag US vs UK English; “British English (iNat alternates)” lists the other distinct English names it carries (e.g. Great Northern Diver) and may include alternates that are not specifically British — treat it as a cue to double-check. Other languages come from iNaturalist's vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
       </div>
     </div>
   </div>
@@ -275,9 +295,10 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     }finally{ $('eb_go').disabled=false; }
   }
   function refresh(){
-    if(!LAST) return; renderMeta(LAST.meta||{}); renderTable(LAST.rows||[]); $('eb_result').classList.remove('hidden');
+    if(!LAST) return; renderMeta(LAST.meta||{}, LAST.rows||[]); renderTable(LAST.rows||[]); $('eb_result').classList.remove('hidden');
   }
-  function renderMeta(m){
+  function renderMeta(m, rows){
+    rows = rows || [];
     const bits=[];
     if(m.num_species!=null) bits.push(m.num_species+' species');
     if(m.num_other_taxa!=null) bits.push(m.num_other_taxa+' other taxa');
@@ -285,6 +306,12 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     if(m.num_locations!=null) bits.push(m.num_locations+' locations');
     if(m.countries&&m.countries.length) bits.push(escapeHtml(m.countries.join(' / ')));
     let html = bits.length ? '<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>' : '';
+    // per-supergroup summary (eBird = birds only)
+    const indiv = rows.reduce((s,r)=> s+(r.obs_count||0), 0);
+    const sgline = indiv>0
+      ? 'Birds: <b>'+rows.length+'</b> taxa · <b>'+indiv.toLocaleString()+'</b> individuals'
+      : 'Birds: <b>'+rows.length+'</b> taxa · individuals not reported';
+    html += '<div style="margin-top:8px;font-size:13px">'+sgline+'</div>';
     if(m.narrative) html += '<div style="margin-top:6px">'+escapeHtml(m.narrative)+'</div>';
     if(m.chinese_fallback_count && selectedLangs().some(l=>l.key==='chinese_name')){
       html += '<div style="margin-top:6px;color:var(--mut);font-size:12px">Chinese names: '+(m.chinese_native_count||0)+' native; '+(m.chinese_fallback_count||0)+' shown as IOC English fallback (grey italic) for species not occurring in China.</div>';
@@ -440,6 +467,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     return rows;
   }
   function catCounts(rows){ const c={}; CATS.forEach(x=>c[x.key]=0); rows.forEach(r=>{ c[r.category]=(c[r.category]||0)+1; }); return c; }
+  function orgCounts(rows){ const c={}; CATS.forEach(x=>c[x.key]=0); rows.forEach(r=>{ c[r.category]=(c[r.category]||0)+(r.obs_count||0); }); return c; }
 
   function renderCatPicker(){
     const counts=LAST?catCounts(LAST.rows):null; const grid=$('in_catgrid'); grid.innerHTML='';
@@ -476,9 +504,16 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   function refresh(){ if(!LAST) return; renderMeta(); renderTable(); $('in_result').classList.remove('hidden'); }
   function renderMeta(){
     const m=LAST.meta||{}, p=LAST.project||{}; const bits=[]; bits.push((LAST.rows.length)+' taxa');
-    const cc=catCounts(LAST.rows); CATS.forEach(c=>{ if(cc[c.key]) bits.push(c.label+': '+cc[c.key]); });
     let html='<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>';
     if(p.title) html+='<div style="margin-top:6px"><a href="https://www.inaturalist.org/projects/'+(p.slug||p.id)+'" target="_blank" rel="noopener">'+escapeHtml(p.title)+'</a></div>';
+    // per-supergroup summary (all project taxa / observations)
+    const sc=catCounts(LAST.rows), oc=orgCounts(LAST.rows);
+    let sg='<table class="sgtable"><caption>Per supergroup</caption><thead><tr><th>Supergroup</th><th>Taxa</th><th>Observations</th></tr></thead><tbody>';
+    let tSpec=0, tObs=0;
+    CATS.forEach(c=>{ if(sc[c.key]){ sg+='<tr><td>'+c.label+'</td><td>'+sc[c.key]+'</td><td>'+oc[c.key].toLocaleString()+'</td></tr>'; tSpec+=sc[c.key]; tObs+=oc[c.key]; } });
+    sg+='<tr class="sgtot"><td>Total</td><td>'+tSpec+'</td><td>'+tObs.toLocaleString()+'</td></tr></tbody></table>';
+    sg+='<div class="sgnote">“Observations” is iNaturalist’s count of records, not individual organisms. Some IDs are coarser than species (e.g. a genus or class), so the column is labelled “Taxa”.</div>';
+    html+=sg;
     const sel=selectedLangs();
     if(sel.some(l=>l.cjk)){ const rows=LAST.rows; const withChinese=rows.filter(r=>r.chinese_name).length; const nat=rows.filter(r=>r.chinese_name&&!r.chinese_is_fallback).length; const fb=rows.filter(r=>r.chinese_name&&r.chinese_is_fallback).length; const missing=rows.length-withChinese; html+='<div style="margin-top:6px;color:var(--mut);font-size:12px">Chinese names: '+nat+' simplified; '+fb+' traditional fallback (grey italic); '+missing+' blank.</div>'; }
     $('in_metainfo').innerHTML=html; $('in_rowcount').textContent=visibleRows().length+' shown';
@@ -536,10 +571,15 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const API = 'https://api.inaturalist.org/v1';
   const LANGS = [
     {label:'German',                 locale:'de'},
-    {label:'French',                locale:'fr'},
+    {label:'French',                 locale:'fr'},
     {label:'Spanish',                locale:'es'},
     {label:'Norwegian',              locale:'nb'},
+    {label:'Danish',                 locale:'da'},
+    {label:'Swedish',                locale:'sv'},
+    {label:'Finnish',                locale:'fi'},
     {label:'Dutch',                  locale:'nl'},
+    {label:'Polish',                 locale:'pl'},
+    {label:'Russian',                locale:'ru'},
     {label:'Chinese (Simplified)',   locale:'zh-CN', alt:'zh'},
     {label:'Japanese',               locale:'ja'},
   ];
@@ -561,14 +601,18 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   function renderRows(tax, names){
     const en = englishNames(names);
     const rows = [
-      {label:'Scientific name', value: tax.name + (tax.rank? ' ('+tax.rank+')':'')},
+      {label:'Scientific name', value: tax.name + (tax.rank? ' ('+tax.rank+')':''), feat:true, sci:true},
       {label:'American English', value: tax.preferred_common_name || en.american},
       {label:'British English (iNat alternates)', value: en.british},
     ];
     LANGS.forEach(L=> rows.push({label:L.label, value: nameForLocale(names, L.locale, L.alt)}));
-    let h='<thead><tr><th>Language</th><th>Name</th></tr></thead><tbody>';
-    rows.forEach(r=>{ const v = r.value ? escapeHtml(r.value) : '<span style="color:var(--mut)">—</span>'; h+='<tr><td style="white-space:nowrap;color:var(--mut);font-size:12px">'+escapeHtml(r.label)+'</td><td>'+v+'</td></tr>'; });
-    h+='</tbody>'; $('tr_tbl').innerHTML=h;
+    let h='';
+    rows.forEach(r=>{
+      const cls='ntile'+(r.feat?' feat':'')+(r.sci?' sci':'');
+      const v = r.value ? escapeHtml(r.value) : '<span style="color:var(--mut)">—</span>';
+      h += '<div class="'+cls+'"><div class="nlab">'+escapeHtml(r.label)+'</div><div class="nval">'+v+'</div></div>';
+    });
+    $('tr_tbl').innerHTML=h;
   }
   function renderCands(results, chosenId){
     const box=$('tr_cands'); box.innerHTML='';

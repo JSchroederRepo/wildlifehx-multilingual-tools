@@ -157,7 +157,8 @@ def build_table(trip_id, force_refresh=False):
     for taxon in taxa:
         code = taxon.get("speciesCode", "")
         row = {"scientific_name": taxon.get("sciName", ""),
-               "english_name": taxon.get("commonName", ""), "species_code": code}
+               "english_name": taxon.get("commonName", ""), "species_code": code,
+               "obs_count": int(taxon.get("numIndividuals") or 0)}
         for locale, col_key, _, _ in NAME_COLUMNS:
             info = maps[locale].get(code, {})
             name = info.get("common_name", "")
