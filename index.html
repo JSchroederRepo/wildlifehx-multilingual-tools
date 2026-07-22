@@ -709,13 +709,13 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
       // For birds, use Cornell/eBird taxonomy names (= Birds of the World) when available.
       if(isBird(tax) && tax.name){
         try{
-          status('Loading bird names (Cornell/eBird taxonomy) …');
+          status('Loading bird names (Cornell/eBird taxonomy; first lookup may take a moment) …');
           const eb = await fetchBirdNames(tax.name);
           if(eb && eb.found){ renderBirdRows(tax, names, eb); usedBirdPath = true; }
         }catch(e){ /* fall back to iNaturalist below */ }
       }
       if(!usedBirdPath) renderRows(tax, names);
-      const src = usedBirdPath ? 'Cornell/eBird (Birds of the World)' : 'iNaturalist';
+      const src = usedBirdPath ? 'Cornell/eBird taxonomy (BotW-aligned)' : 'iNaturalist';
       const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+escapeHtml(String(tax.rank))+')':'');
       $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <span class="tag" style="color:var(--mut)">'+src+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
       $('tr_result').classList.remove('hidden');
