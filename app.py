@@ -32,9 +32,18 @@ NAME_COLUMNS = [
     ("es", "spanish_name", "Spanish", False),
     ("nl", "dutch_name", "Dutch", False),
     ("no", "norwegian_name", "Norwegian", False),
+    ("da", "danish_name", "Danish", False),
+    ("sv", "swedish_name", "Swedish", False),
+    ("fi", "finnish_name", "Finnish", False),
+    ("pl", "polish_name", "Polish", False),
+    ("ru", "russian_name", "Russian", False),
     ("zh_SIM", "chinese_name", "Chinese", True),
 ]
 COLUMNS = ["scientific_name", "english_name"] + [c[1] for c in NAME_COLUMNS]
+
+# Locales served to the translator for bird names. These are Cornell/eBird
+# taxonomy common-name sets — the same namesets Birds of the World uses.
+BIRD_NAME_LOCALES = ["en", "de", "fr", "es", "nl", "no", "da", "sv", "fi", "pl", "ru", "zh_SIM", "ja"]
 
 
 def http_get(url, accept="application/json", timeout=60):
@@ -136,6 +145,7 @@ def load_taxonomy(locale, force_refresh=False):
             code = (row.get("SPECIES_CODE") or "").strip()
             if not code: continue
             name_map[code] = {
+                "sci_name": (row.get("SCIENTIFIC_NAME") or "").strip(),
                 "common_name": (row.get("COMMON_NAME") or "").strip(),
                 "order": (row.get("ORDER") or "").strip(),
                 "family_com": (row.get("FAMILY_COM_NAME") or "").strip(),
@@ -147,6 +157,44 @@ def load_taxonomy(locale, force_refresh=False):
 def build_name_maps(force_refresh=False):
     return {locale: load_taxonomy(locale, force_refresh=force_refresh)
             for locale, _, _, _ in NAME_COLUMNS}
+
+
+# ---- in-memory cache + bird-name lookup (translator, Birds-of-the-World-aligned) ----
+_TAX_CACHE = {}
+_SCI_INDEX = None
+
+
+def get_taxonomy(locale):
+    m = _TAX_CACHE.get(locale)
+    if m is None:
+        m = load_taxonomy(locale)
+        _TAX_CACHE[locale] = m
+    return m
+
+
+def _norm_sci(s):
+    s = " ".join(str(s or "").strip().lower().split())
+    return s.replace("\u00d7", "x").replace(" x ", " ")
+
+
+def get_bird_names(sci_name):
+    """Return Cornell/eBird taxonomy common names for a bird, keyed by locale."""
+    global _SCI_INDEX
+    en = get_taxonomy("en")
+    if _SCI_INDEX is None:
+        _SCI_INDEX = {}
+        for code, info in en.items():
+            key = _norm_sci(info.get("sci_name", ""))
+            if key:
+                _SCI_INDEX.setdefault(key, code)
+    code = _SCI_INDEX.get(_norm_sci(sci_name))
+    if not code:
+        return {"found": False}
+    names = {}
+    for loc in BIRD_NAME_LOCALES:
+        names[loc] = get_taxonomy(loc).get(code, {}).get("common_name", "")
+    return {"found": True, "scientific": sci_name, "speciesCode": code,
+            "english": names.get("en", ""), "names": names}
 
 
 def build_table(trip_id, force_refresh=False):
@@ -197,6 +245,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, b"index.html not found", "text/plain; charset=utf-8")
         if path.rstrip("/").endswith("/api") or path == "/api":
             qs = urllib.parse.parse_qs(parsed.query)
+            bird = (qs.get("birdnames", [""])[0]).strip()
+            if bird:
+                try:
+                    res = get_bird_names(bird)
+                    return self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"),
+                                      "application/json; charset=utf-8")
+                except Exception as e:
+                    return self._send(500, str(e).encode("utf-8"), "text/plain; charset=utf-8")
             trip = (qs.get("trip", [""])[0]).strip()
             if not trip:
                 return self._send(400, b"missing 'trip' parameter", "text/plain; charset=utf-8")

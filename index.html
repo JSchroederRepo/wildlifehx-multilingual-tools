@@ -153,7 +153,7 @@
       <div class="card">
         <div id="tr_metainfo" class="meta"></div>
         <div id="tr_tbl" class="ngrid"></div>
-        <details class="fixednote"><summary>How English &amp; language names are chosen</summary><p>American English uses iNaturalist's preferred English name (for birds this generally follows the Clements/eBird-style name). iNaturalist does not tag US vs UK English; “British English (iNat alternates)” lists the other distinct English names it carries (e.g. Great Northern Diver) and may include alternates that are not specifically British — treat it as a cue to double-check. Other languages come from iNaturalist's vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
+        <details class="fixednote"><summary>Where the names come from</summary><p>For birds, names use the Cornell/eBird taxonomy common-name sets — the same namesets Birds of the World uses (American English, German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch, Polish, Russian, Chinese, Japanese). The eBird taxonomy does not expose true British English names reliably, so “British English / alternates” is still drawn from iNaturalist’s alternate-English list as a best-effort cue (it may include non-British alternates — treat it as a cue to double-check). For non-bird taxa, all names come from iNaturalist’s vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
       </div>
     </div>
   </div>
@@ -276,6 +276,11 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {key:'spanish_name',   label:'Spanish',   locale:'es'},
     {key:'dutch_name',     label:'Dutch',     locale:'nl'},
     {key:'norwegian_name', label:'Norwegian', locale:'no'},
+    {key:'danish_name',    label:'Danish',    locale:'da'},
+    {key:'swedish_name',   label:'Swedish',   locale:'sv'},
+    {key:'finnish_name',   label:'Finnish',   locale:'fi'},
+    {key:'polish_name',    label:'Polish',    locale:'pl'},
+    {key:'russian_name',   label:'Russian',   locale:'ru'},
     {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
   ];
   let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
@@ -588,6 +593,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
 (function(){
   const $ = id => document.getElementById(id);
   const API = 'https://api.inaturalist.org/v1';
+  const BACK = '';
   const LANGS = [
     {label:'German',                 locale:'de'},
     {label:'French',                 locale:'fr'},
@@ -601,6 +607,23 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {label:'Russian',                locale:'ru'},
     {label:'Chinese (Simplified)',   locale:'zh-CN', alt:'zh'},
     {label:'Japanese',               locale:'ja'},
+  ];
+  // eBird-taxonomy locales for bird names (Birds-of-the-World-aligned namesets).
+  // Order mirrors LANGS above. Norwegian uses eBird code 'no' (iNat uses 'nb');
+  // Chinese uses eBird 'zh_SIM' (iNat uses 'zh-CN'/'zh').
+  const BIRD_LANGS = [
+    {label:'German',                loc:'de'},
+    {label:'French',                loc:'fr'},
+    {label:'Spanish',               loc:'es'},
+    {label:'Norwegian',             loc:'no'},
+    {label:'Danish',                loc:'da'},
+    {label:'Swedish',               loc:'sv'},
+    {label:'Finnish',               loc:'fi'},
+    {label:'Dutch',                 loc:'nl'},
+    {label:'Polish',                loc:'pl'},
+    {label:'Russian',               loc:'ru'},
+    {label:'Chinese (Simplified)',  loc:'zh_SIM'},
+    {label:'Japanese',              loc:'ja'},
   ];
   let STATE = { results: [] };
   function status(s, cls){ const e=$('tr_status'); e.className=cls||'meta'; e.innerText=s||''; }
@@ -616,6 +639,31 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     const prefName = pref ? pref.name : '';
     const alts = en.filter(n=> n!==pref && n.name && n.name.toLowerCase()!==(prefName||'').toLowerCase()).map(n=>n.name);
     return { american: prefName, british: [...new Set(alts)].join(' / ') };
+  }
+  function isBird(tax){
+    const it = tax.iconic_taxon_name || (tax.iconic_taxon && tax.iconic_taxon.name) || '';
+    return it === 'Aves';
+  }
+  async function fetchBirdNames(sci){
+    const r = await fetch(BACK+'/api?birdnames='+encodeURIComponent(sci));
+    if(!r.ok) return null;
+    return await r.json();
+  }
+  function renderBirdRows(tax, names, eb){
+    const en = englishNames(names); // iNat alternates — used only for the British-English cue
+    const rows = [
+      {label:'Scientific name', value: tax.name + (tax.rank? ' ('+tax.rank+')':''), feat:true, sci:true},
+      {label:'American English', value: eb.english || tax.preferred_common_name || en.american},
+      {label:'British English / alternates (iNaturalist)', value: en.british},
+    ];
+    BIRD_LANGS.forEach(L=> rows.push({label:L.label, value: eb.names ? eb.names[L.loc] : ''}));
+    let h='';
+    rows.forEach(r=>{
+      const cls='ntile'+(r.feat?' feat':'')+(r.sci?' sci':'');
+      const v = r.value ? escapeHtml(r.value) : '<span style="color:var(--mut)">—</span>';
+      h += '<div class="'+cls+'"><div class="nlab">'+escapeHtml(r.label)+'</div><div class="nval">'+v+'</div></div>';
+    });
+    $('tr_tbl').innerHTML=h;
   }
   function renderRows(tax, names){
     const en = englishNames(names);
@@ -652,14 +700,24 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   async function loadTaxon(t){
     status('Loading names for '+t.name+' …');
     $('tr_go').disabled=true;
+    let usedBirdPath = false;
     try{
       const d = await fetch(`${API}/taxa?id=${t.id}&all_names=true&per_page=200`).then(r=>r.json());
       const tax = (d.results&&d.results[0]) || t;
       const names = tax.names || [];
       renderCands(STATE.results, tax.id);
-      renderRows(tax, names);
+      // For birds, use Cornell/eBird taxonomy names (= Birds of the World) when available.
+      if(isBird(tax) && tax.name){
+        try{
+          status('Loading bird names (Cornell/eBird taxonomy) …');
+          const eb = await fetchBirdNames(tax.name);
+          if(eb && eb.found){ renderBirdRows(tax, names, eb); usedBirdPath = true; }
+        }catch(e){ /* fall back to iNaturalist below */ }
+      }
+      if(!usedBirdPath) renderRows(tax, names);
+      const src = usedBirdPath ? 'Cornell/eBird (Birds of the World)' : 'iNaturalist';
       const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+escapeHtml(String(tax.rank))+')':'');
-      $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
+      $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <span class="tag" style="color:var(--mut)">'+src+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
       $('tr_result').classList.remove('hidden');
       status('');
     }catch(e){ status('Could not load names ('+e.message+').', 'err'); }
