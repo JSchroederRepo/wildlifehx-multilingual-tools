@@ -10,8 +10,9 @@ Spanish, Norwegian, Dutch, Chinese, and Japanese.
   get it translated into Scientific name, American English, British English (iNat
   alternates), German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch,
   Polish, Russian, Chinese (Simplified), and Japanese. Results show as a compact
-  tile grid (two columns on phones) for a quick one-glance overview. Runs fully in
-  the browser via the public iNaturalist API. If several taxa match, candidate
+  tile grid (two columns on phones) for a quick one-glance overview. Non-bird taxa
+  are resolved entirely in the browser via the public iNaturalist API; birds also
+  call the backend for their AviList/eBird names. If several taxa match, candidate
   buttons appear so you can pick the right one.
 - **eBird Trip Report** — paste a trip-report URL/ID; get the trip's species with
   multilingual common names. Needs the small Python backend (`app.py`) because
@@ -35,6 +36,15 @@ directly to `api.inaturalist.org`.
 
 > Python 3.7+ is the only requirement. No `pip install` needed.
 
+## Tests
+
+```bash
+python3 -m unittest discover -v
+```
+
+Covers the AviList name lookup and its eBird fallback for both the trip-report table
+and the translator's bird path. No network access needed — the eBird calls are mocked.
+
 ## Host it publicly (standalone, outside Perplexity)
 
 Because `app.py` serves both the page and `/api` on one origin, the same command
@@ -53,8 +63,38 @@ backend, so it will not function on a static-only host.
 
 ## Data sources
 
-This tool does not maintain its own species database — it fetches taxonomy and names
-live from the eBird and iNaturalist APIs.
+Names are fetched live from the eBird and iNaturalist APIs, with one exception: the
+AviList bird checklist is bundled as a static file (see below).
+
+### Bird scientific and English names — AviList (bundled)
+
+For birds, the **scientific name** and the **English common name** come from
+[AviList](https://www.avilist.org) v2025b, the global consensus avian taxonomy
+(the merger of the Clements, IOC and BirdLife checklists). This applies to the
+**eBird Trip Report** tab and to birds in the **Species translator** tab. The
+iNaturalist tab is unaffected and keeps its iNaturalist-sourced names.
+
+Only English and the scientific name come from AviList; every **other language
+still comes from the eBird per-locale taxonomy**, keyed by eBird `SPECIES_CODE`.
+
+- **How it is bundled** — `data/avilist_v2025b_en.json`, a ~1.2 MB lookup of
+  11,131 species keyed by lowercased scientific name:
+  `{"gavia immer": {"scientific_name": "Gavia immer", "english_name": "Common Loon"}}`.
+  `app.py` loads it lazily on first use and keeps it in memory. There is no build
+  step and nothing is downloaded at runtime.
+- **Matching** — the taxon's scientific name is lowercased and whitespace-collapsed,
+  then looked up. On a hit, AviList's canonical scientific name and English name are
+  shown (e.g. *Dovekie* → *Little Auk*, *Common Raven* → *Northern Raven*).
+- **Fallback** — on a miss, eBird's own scientific and English names are shown and no
+  error is surfaced. About 99.5% of eBird species match; misses are genus-level
+  synonym splits (e.g. eBird *Oressochen jubatus* vs AviList *Neochen jubata*) plus
+  every subspecies, hybrid and `spuh`/`slash` taxon, which AviList does not list.
+- **Regenerating it** — download the AviList short checklist
+  ([`AviList-v2025b-10Jun2026-short.xlsx`](https://www.avilist.org/wp-content/uploads/2026/06/AviList-v2025b-10Jun2026-short.xlsx)),
+  keep the rows with `Taxon_rank == "species"`, and write each one's
+  `Scientific_name` and `English_name_AviList` into the JSON shape above. Reading the
+  XLSX needs a spreadsheet tool or a library such as `openpyxl`, so it is done
+  out-of-band rather than in `app.py` — that keeps the app stdlib-only.
 
 ### eBird tab (fetched server-side by `app.py`)
 
@@ -63,13 +103,16 @@ backend and proxied to the browser via `/api?trip=<id>`.
 
 - **Trip report data** — eBird's internal trip-report API:
   - `https://ebird.org/tripreport-internal/v1/taxon-list/{id}` — the species/taxon
-    list for the trip (also the source of the scientific name and the English name).
+    list for the trip. Its scientific and English names are used only as the fallback
+    for taxa AviList does not list (see above).
   - `…/narrative/{id}`, `…/num-species/{id}`, `…/num-checklists/{id}`,
     `…/locations/{id}` — trip metadata (description, counts, countries, locations).
 - **Multilingual common names** — the eBird taxonomy, one CSV per locale:
   `https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}`
   Locales fetched: `de` (German), `fr` (French), `es` (Spanish), `nl` (Dutch),
-  `no` (Norwegian), `zh_SIM` (Simplified Chinese). Each locale's taxonomy is cached
+  `no` (Norwegian — eBird uses `no`, not `nb`/`nn`), `da` (Danish), `sv` (Swedish),
+  `fi` (Finnish), `pl` (Polish), `ru` (Russian), `zh_SIM` (Simplified Chinese), and
+  `ja` (Japanese, translator only). Each locale's taxonomy is cached
   locally as a CSV under `~/.cache/ebird_tripreport_names/ebird_taxonomy_{locale}.csv`
   for ~30 days, then refreshed automatically.
 
@@ -107,8 +150,9 @@ the browser to `https://api.inaturalist.org/v1` — no backend involved.
   prefers an exact scientific-name match, then a species-rank match, then the top
   result; candidate matches are shown so you can correct a wrong guess. Names come
   from `GET /v1/taxa?id={id}&all_names=true` (the `names[]` array keyed by locale).
-  - **American English** = iNaturalist's preferred English name (for birds this
-    generally follows the Clements/eBird-style name).
+  - **American English** = iNaturalist's preferred English name. For birds this is
+    replaced by the AviList English name (see above); iNaturalist's name is only the
+    fallback when the bird lookup fails.
   - **British English (iNat alternates)** = the other distinct English names
     iNaturalist lists, which include regional forms such as *Great Northern Diver*
     (vs *Common Loon*). iNaturalist does **not** tag US vs UK English, so this column
@@ -134,6 +178,8 @@ Both species tables show a per-supergroup summary above the table:
 
 ### Attribution
 
+- Bird scientific and English names from [AviList](https://www.avilist.org) v2025b
+  (AviList Core Team 2025, *AviList: The Global Avian Checklist*).
 - eBird data © [Cornell Lab of Ornithology](https://ebird.org). This tool is
   independent and not affiliated with or endorsed by the Cornell Lab.
 - iNaturalist data via the [iNaturalist API](https://api.inaturalist.org/v1);

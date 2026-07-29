@@ -153,7 +153,7 @@
       <div class="card">
         <div id="tr_metainfo" class="meta"></div>
         <div id="tr_tbl" class="ngrid"></div>
-        <details class="fixednote"><summary>Where the names come from</summary><p>For birds, names use the Cornell/eBird taxonomy common-name sets — the same namesets Birds of the World uses (American English, German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch, Polish, Russian, Chinese, Japanese). The eBird taxonomy does not expose true British English names reliably, so “British English / alternates” is still drawn from iNaturalist’s alternate-English list as a best-effort cue (it may include non-British alternates — treat it as a cue to double-check). For non-bird taxa, all names come from iNaturalist’s vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
+        <details class="fixednote"><summary>Where the names come from</summary><p>For birds, the scientific name and the American English name come from <a href="https://www.avilist.org" target="_blank" rel="noopener">AviList</a> v2025b, the global consensus bird taxonomy. The other languages (German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch, Polish, Russian, Chinese, Japanese) come from the Cornell/eBird taxonomy common-name sets — the same namesets Birds of the World uses. Where AviList has no entry for a species (about 0.5%, mostly genus-level synonym splits), the eBird scientific and English names are shown instead. The eBird taxonomy does not expose true British English names reliably, so “British English / alternates” is still drawn from iNaturalist’s alternate-English list as a best-effort cue (it may include non-British alternates — treat it as a cue to double-check). For non-bird taxa, all names come from iNaturalist’s vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
       </div>
     </div>
   </div>
@@ -229,7 +229,7 @@
       </div>
     </div>
   </div>
-  <footer class="foot"><div>© 2026 Julia Schroeder. eBird data © <a href="https://ebird.org" target="_blank" rel="noopener">Cornell Lab of Ornithology</a>; iNaturalist data © <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist contributors</a>.</div><div class="contactwrap"><button id="contact_btn" class="contactbtn" type="button" title="Reveal a contact email">Contact</button></div></footer>
+  <footer class="foot"><div>© 2026 Julia Schroeder. Bird scientific and English names from <a href="https://www.avilist.org" target="_blank" rel="noopener">AviList</a> v2025b; eBird data © <a href="https://ebird.org" target="_blank" rel="noopener">Cornell Lab of Ornithology</a>; iNaturalist data © <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist contributors</a>.</div><div class="contactwrap"><button id="contact_btn" class="contactbtn" type="button" title="Reveal a contact email">Contact</button></div></footer>
 </div>
 
 <script>
@@ -652,7 +652,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   function renderBirdRows(tax, names, eb){
     const en = englishNames(names); // iNat alternates — used only for the British-English cue
     const rows = [
-      {label:'Scientific name', value: tax.name + (tax.rank? ' ('+tax.rank+')':''), feat:true, sci:true},
+      {label:'Scientific name', value: (eb.scientific || tax.name) + (tax.rank? ' ('+tax.rank+')':''), feat:true, sci:true},
       {label:'American English', value: eb.english || tax.preferred_common_name || en.american},
       {label:'British English / alternates (iNaturalist)', value: en.british},
     ];
@@ -706,16 +706,16 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
       const tax = (d.results&&d.results[0]) || t;
       const names = tax.names || [];
       renderCands(STATE.results, tax.id);
-      // For birds, use Cornell/eBird taxonomy names (= Birds of the World) when available.
+      // For birds: scientific + English from AviList, other languages from eBird.
       if(isBird(tax) && tax.name){
         try{
-          status('Loading bird names (Cornell/eBird taxonomy; first lookup may take a moment) …');
+          status('Loading bird names (AviList + Cornell/eBird taxonomy; first lookup may take a moment) …');
           const eb = await fetchBirdNames(tax.name);
           if(eb && eb.found){ renderBirdRows(tax, names, eb); usedBirdPath = true; }
         }catch(e){ /* fall back to iNaturalist below */ }
       }
       if(!usedBirdPath) renderRows(tax, names);
-      const src = usedBirdPath ? 'Cornell/eBird taxonomy (BotW-aligned)' : 'iNaturalist';
+      const src = usedBirdPath ? 'AviList v2025b + Cornell/eBird taxonomy' : 'iNaturalist';
       const meta = (tax.preferred_common_name? escapeHtml(tax.preferred_common_name)+' — ' : '') + '<span class="sci">'+escapeHtml(tax.name)+'</span>' + (tax.rank? ' ('+escapeHtml(String(tax.rank))+')':'');
       $('tr_metainfo').innerHTML = '<span class="tag">'+meta+'</span> <span class="tag" style="color:var(--mut)">'+src+'</span> <a class="smalllink" href="https://www.inaturalist.org/taxa/'+tax.id+'" target="_blank" rel="noopener">iNaturalist ↗</a>';
       $('tr_result').classList.remove('hidden');
