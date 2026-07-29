@@ -6,6 +6,9 @@ WildlifeHX combined backend: eBird Trip Report -> multilingual species table.
 Serves /api?trip=<url-or-id>  (eBird data + multilingual names, server-side because
 ebird.org sends no CORS headers) and, for local use, serves index.html at /.
 
+Scientific and English bird names come from the bundled AviList consensus taxonomy;
+non-English names come from eBird's per-locale taxonomy.
+
 In production (pplx.app) the static index.html is served from S3 and only
 /port/8000/api requests are proxied to this server. Stdlib-only, no dependencies.
 """
@@ -23,8 +26,15 @@ TRIPNUMCHECKLISTS_URL = "https://ebird.org/tripreport-internal/v1/num-checklists
 TRIPLOCATIONS_URL = "https://ebird.org/tripreport-internal/v1/locations/{id}"
 TAXONOMY_URL = "https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}"
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "ebird_tripreport_names")
 CACHE_TTL_SECONDS = 30 * 24 * 3600
+
+# AviList (avilist.org) is the global consensus bird taxonomy; it supplies the
+# scientific and English names. Bundled as a static file so no 5 MB spreadsheet
+# is fetched at runtime. See README for how to regenerate it.
+AVILIST_PATH = os.path.join(HERE, "data", "avilist_v2025b_en.json")
 
 NAME_COLUMNS = [
     ("de", "german_name", "German", False),
@@ -41,8 +51,9 @@ NAME_COLUMNS = [
 ]
 COLUMNS = ["scientific_name", "english_name"] + [c[1] for c in NAME_COLUMNS]
 
-# Locales served to the translator for bird names. These are Cornell/eBird
-# taxonomy common-name sets — the same namesets Birds of the World uses.
+# Locales served to the translator for bird names. The non-English sets are
+# Cornell/eBird taxonomy common names; "en" is replaced by AviList's English name
+# wherever the species matches.
 BIRD_NAME_LOCALES = ["en", "de", "fr", "es", "nl", "no", "da", "sv", "fi", "pl", "ru", "zh_SIM", "ja"]
 
 
@@ -177,8 +188,37 @@ def _norm_sci(s):
     return s.replace("\u00d7", "x").replace(" x ", " ")
 
 
+# ---- AviList: authoritative scientific + English names ----
+_AVILIST = None
+
+
+def load_avilist():
+    global _AVILIST
+    if _AVILIST is None:
+        try:
+            with open(AVILIST_PATH, encoding="utf-8") as f:
+                _AVILIST = json.load(f).get("species") or {}
+        except (OSError, ValueError) as e:
+            print(f"AviList lookup unavailable ({e}); using eBird names.", file=sys.stderr)
+            _AVILIST = {}
+    return _AVILIST
+
+
+def avilist_names(sci_name, ebird_english):
+    """AviList scientific + English name, falling back to eBird's when unmatched.
+
+    Subspecies, hybrids and other non-species taxa never match, which is what the
+    fallback is for \u2014 as are the ~0.5% of eBird species AviList lists under a
+    different genus (e.g. Oressochen jubatus vs Neochen jubata).
+    """
+    hit = load_avilist().get(" ".join(str(sci_name or "").lower().split()))
+    if not hit:
+        return sci_name, ebird_english
+    return hit.get("scientific_name") or sci_name, hit.get("english_name") or ebird_english
+
+
 def get_bird_names(sci_name):
-    """Return Cornell/eBird taxonomy common names for a bird, keyed by locale."""
+    """Bird names by locale: scientific/English from AviList, the rest from eBird."""
     global _SCI_INDEX
     en = get_taxonomy("en")
     if _SCI_INDEX is None:
@@ -193,8 +233,11 @@ def get_bird_names(sci_name):
     names = {}
     for loc in BIRD_NAME_LOCALES:
         names[loc] = get_taxonomy(loc).get(code, {}).get("common_name", "")
-    return {"found": True, "scientific": sci_name, "speciesCode": code,
-            "english": names.get("en", ""), "names": names}
+    ebird_sci = en.get(code, {}).get("sci_name", "") or sci_name
+    sci, english = avilist_names(ebird_sci, names.get("en", ""))
+    names["en"] = english
+    return {"found": True, "scientific": sci, "speciesCode": code,
+            "english": english, "names": names}
 
 
 def build_table(trip_id, force_refresh=False):
@@ -204,8 +247,8 @@ def build_table(trip_id, force_refresh=False):
     rows = []
     for taxon in taxa:
         code = taxon.get("speciesCode", "")
-        row = {"scientific_name": taxon.get("sciName", ""),
-               "english_name": taxon.get("commonName", ""), "species_code": code,
+        sci, english = avilist_names(taxon.get("sciName", ""), taxon.get("commonName", ""))
+        row = {"scientific_name": sci, "english_name": english, "species_code": code,
                "obs_count": int(taxon.get("numIndividuals") or 0)}
         for locale, col_key, _, _ in NAME_COLUMNS:
             info = maps[locale].get(code, {})
@@ -217,9 +260,6 @@ def build_table(trip_id, force_refresh=False):
     meta["chinese_native_count"] = sum(1 for r in rows if not r.get("chinese_is_fallback"))
     meta["chinese_fallback_count"] = sum(1 for r in rows if r.get("chinese_is_fallback"))
     return meta, rows
-
-
-HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 class Handler(BaseHTTPRequestHandler):
