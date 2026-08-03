@@ -21,6 +21,9 @@ TRIPNARRATIVE_URL = "https://ebird.org/tripreport-internal/v1/narrative/{id}"
 TRIPNUMSPECIES_URL = "https://ebird.org/tripreport-internal/v1/num-species/{id}"
 TRIPNUMCHECKLISTS_URL = "https://ebird.org/tripreport-internal/v1/num-checklists/{id}"
 TRIPLOCATIONS_URL = "https://ebird.org/tripreport-internal/v1/locations/{id}"
+TRIPCHECKLISTS_URL = "https://ebird.org/tripreport-internal/v1/checklists/{id}"
+TRIPTAXONDETAIL_URL = "https://ebird.org/tripreport-internal/v1/taxon-detail/{id}/{code}"
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TAXONOMY_URL = "https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}"
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "ebird_tripreport_names")
@@ -125,6 +128,23 @@ def get_trip_meta(trip_id):
     return meta
 
 
+def get_trip_checklists(trip_id):
+    data = http_get_json(TRIPCHECKLISTS_URL.format(id=trip_id))
+    if not isinstance(data, list):
+        raise RuntimeError(f"Unexpected checklists response for {trip_id}")
+    return data
+
+
+def get_taxon_detail(trip_id, code):
+    try:
+        data = http_get_json(TRIPTAXONDETAIL_URL.format(id=trip_id, code=code))
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {"checklists": []}
+
+
 def _cache_path(locale):
     return os.path.join(CACHE_DIR, f"ebird_taxonomy_{locale}.csv")
 
@@ -219,6 +239,80 @@ def build_table(trip_id, force_refresh=False):
     return meta, rows
 
 
+def build_table_for_date(trip_id, date_str, force_refresh=False):
+    """Species (and checklists) recorded on one specific day within a trip report.
+
+    eBird's per-trip taxon-list only gives trip-wide totals, so to isolate a single
+    day we cross-reference each species' taxon-detail (which lists the individual
+    checklists it was seen on, with dates) against the trip's checklist list.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    checklists = get_trip_checklists(trip_id)
+    matching_checklists = [c for c in checklists
+                            if str(c.get("isoObsDate", "")).startswith(date_str)]
+
+    taxa = get_trip_taxa(trip_id)
+    maps = build_name_maps(force_refresh=force_refresh)
+    rows = []
+
+    if matching_checklists:
+        def fetch_detail(taxon):
+            code = taxon.get("speciesCode", "")
+            detail = get_taxon_detail(trip_id, code)
+            day_cls = [c for c in (detail.get("checklists") or [])
+                       if str(c.get("obsDt", "")).startswith(date_str)]
+            return taxon, code, day_cls
+
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futures = [ex.submit(fetch_detail, t) for t in taxa]
+            for fut in as_completed(futures):
+                taxon, code, day_cls = fut.result()
+                if not day_cls or not code:
+                    continue
+                obs_count = sum(int(c.get("howMany") or 0) for c in day_cls)
+                row = {"scientific_name": taxon.get("sciName", ""),
+                       "english_name": taxon.get("commonName", ""), "species_code": code,
+                       "obs_count": obs_count}
+                for locale, col_key, _, _ in NAME_COLUMNS:
+                    info = maps[locale].get(code, {})
+                    name = info.get("common_name", "")
+                    row[col_key] = name
+                    if locale == "zh_SIM":
+                        row["chinese_is_fallback"] = bool(name) and not has_cjk(name)
+                rows.append(row)
+    rows.sort(key=lambda r: r.get("scientific_name", ""))
+
+    countries, locations, seen_loc = [], [], set()
+    for c in matching_checklists:
+        loc = c.get("loc") or {}
+        cn = loc.get("countryName") or loc.get("countryCode")
+        if cn and cn not in countries:
+            countries.append(cn)
+        lid = loc.get("locId") or loc.get("locID")
+        if lid and lid not in seen_loc:
+            seen_loc.add(lid)
+            locations.append(loc.get("name") or "")
+
+    meta = {"trip_id": trip_id, "date": date_str,
+            "num_checklists": len(matching_checklists), "num_species": len(rows),
+            "num_locations": len(locations), "countries": countries}
+    meta["chinese_native_count"] = sum(1 for r in rows if not r.get("chinese_is_fallback"))
+    meta["chinese_fallback_count"] = sum(1 for r in rows if r.get("chinese_is_fallback"))
+
+    checklists_out = []
+    for c in matching_checklists:
+        loc = c.get("loc") or {}
+        checklists_out.append({
+            "subId": c.get("subId") or c.get("subID"),
+            "obsDt": c.get("obsDt"), "obsTime": c.get("obsTime"),
+            "isoObsDate": c.get("isoObsDate"), "numSpecies": c.get("numSpecies"),
+            "locName": loc.get("name") or "",
+        })
+    checklists_out.sort(key=lambda c: c.get("isoObsDate") or "")
+    return meta, rows, checklists_out
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -256,10 +350,19 @@ class Handler(BaseHTTPRequestHandler):
             trip = (qs.get("trip", [""])[0]).strip()
             if not trip:
                 return self._send(400, b"missing 'trip' parameter", "text/plain; charset=utf-8")
+            date = (qs.get("date", [""])[0]).strip()
+            if date and not DATE_RE.match(date):
+                return self._send(400, b"'date' must be in YYYY-MM-DD format",
+                                  "text/plain; charset=utf-8")
             try:
                 trip_id = parse_trip_id(trip)
-                meta, rows = build_table(trip_id)
-                payload = json.dumps({"meta": meta, "rows": rows}, ensure_ascii=False).encode("utf-8")
+                if date:
+                    meta, rows, checklists = build_table_for_date(trip_id, date)
+                    payload = json.dumps({"meta": meta, "rows": rows, "checklists": checklists},
+                                         ensure_ascii=False).encode("utf-8")
+                else:
+                    meta, rows = build_table(trip_id)
+                    payload = json.dumps({"meta": meta, "rows": rows}, ensure_ascii=False).encode("utf-8")
                 return self._send(200, payload, "application/json; charset=utf-8")
             except ValueError as e:
                 return self._send(400, str(e).encode("utf-8"), "text/plain; charset=utf-8")

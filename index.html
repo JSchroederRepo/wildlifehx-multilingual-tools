@@ -25,6 +25,10 @@
           color:var(--ink); border:1px solid var(--line); border-radius:8px;
           padding:11px 12px; font-size:15px; }
   input[type=text]:focus { outline:none; border-color:var(--acc); }
+  input[type=date] { flex:0 0 auto; background:#0b0f14; color:var(--ink);
+          border:1px solid var(--line); border-radius:8px; padding:11px 12px;
+          font-size:15px; color-scheme:dark; }
+  input[type=date]:focus { outline:none; border-color:var(--acc); }
   button { background:var(--acc); color:#06203a; border:none; border-radius:8px;
           padding:11px 18px; font-size:15px; font-weight:600; cursor:pointer; }
   button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
@@ -107,6 +111,9 @@
     .tab { padding:8px 12px; font-size:13px; }
     .row { gap:8px; }
     input[type=text] { flex:1 1 0; min-width:0; font-size:16px; padding:12px; }
+    input[type=date] { flex:1 1 160px; font-size:16px; padding:12px; }
+    #panel-td #td_url { flex:1 1 100%; min-width:0; }
+    #panel-td #td_date { flex:1 1 auto; }
     button { padding:12px 16px; font-size:16px; }
     button.mini { padding:6px 10px; font-size:14px; }
     select { font-size:16px; padding:10px 12px; }
@@ -137,6 +144,7 @@
     <div class="tab active" data-tab="tr">Species translator</div>
     <div class="tab" data-tab="eb">eBird Trip Report</div>
     <div class="tab" data-tab="in">iNaturalist Project</div>
+    <div class="tab" data-tab="td">Trip Report by Date</div>
   </div>
 
   <!-- ================= Species translator panel ================= -->
@@ -226,6 +234,34 @@
           <span id="in_rowcount" class="smalllink"></span>
         </div>
         <div style="overflow:auto; max-height:70vh"><table id="in_tbl"></table></div>
+      </div>
+    </div>
+  </div>
+  <!-- ================= Trip Report by Date panel ================= -->
+  <div class="panel" id="panel-td">
+    <div class="card">
+      <div class="row">
+        <input id="td_url" type="text" placeholder="eBird trip report URL or ID">
+        <input id="td_date" type="date">
+        <button id="td_go">Generate</button>
+      </div>
+      <p class="meta" id="td_status"></p>
+      <p class="fixednote">Shows only the species and checklists recorded on the chosen day within the trip report — useful for daily expedition recaps.</p>
+    </div>
+    <div class="card">
+      <p class="langtitle">Additional languages (tick to include, drag or use ↑/↓ to order):</p>
+      <div id="td_langlist" class="langlist"></div>
+      <p class="fixednote">Latin (scientific) and English are always shown as the first two columns.</p>
+    </div>
+    <div id="td_result" class="hidden">
+      <div class="card">
+        <div id="td_metainfo" class="meta"></div>
+        <div id="td_checklists"></div>
+        <div class="tools" style="margin-top:10px">
+          <button class="ghost" id="td_csv">Download CSV</button>
+          <button class="ghost" id="td_tsv">Copy TSV (paste into Excel)</button>
+        </div>
+        <div style="overflow:auto; max-height:70vh"><table id="td_tbl"></table></div>
       </div>
     </div>
   </div>
@@ -362,6 +398,122 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   $('eb_csv').addEventListener('click', ()=>{ const blob=new Blob(["\uFEFF"+toDelim(',')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tripreport_species.csv'; a.click(); });
   $('eb_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });
   function flash(msg){ const b=$('eb_tsv'); const o=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=o,1200); }
+  renderLangPicker();
+})();
+
+/* ====================== Trip Report by Date tool ====================== */
+(function(){
+  const $ = id => document.getElementById(id);
+  const API = '';
+  let LAST = null;
+  const ALL_LANGS = [
+    {key:'german_name',    label:'German',    locale:'de'},
+    {key:'french_name',    label:'French',    locale:'fr'},
+    {key:'spanish_name',   label:'Spanish',   locale:'es'},
+    {key:'dutch_name',     label:'Dutch',     locale:'nl'},
+    {key:'norwegian_name', label:'Norwegian', locale:'no'},
+    {key:'danish_name',    label:'Danish',    locale:'da'},
+    {key:'swedish_name',   label:'Swedish',   locale:'sv'},
+    {key:'finnish_name',   label:'Finnish',   locale:'fi'},
+    {key:'polish_name',    label:'Polish',    locale:'pl'},
+    {key:'russian_name',   label:'Russian',   locale:'ru'},
+    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
+  ];
+  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  function selectedLangs(){ return LANGS.filter(l=>l.on); }
+
+  // default the date picker to today, in the visitor's local timezone
+  (function(){
+    const d=new Date(); const pad=n=>String(n).padStart(2,'0');
+    $('td_date').value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  })();
+
+  function renderLangPicker(){
+    const list = $('td_langlist'); list.innerHTML = '';
+    LANGS.forEach((l, i)=>{
+      const div = document.createElement('div'); div.className='langitem'; div.draggable=true; div.dataset.i=i;
+      div.innerHTML = '<span class="grip" title="drag to reorder">≡</span>'+
+        '<input type="checkbox" '+(l.on?'checked':'')+'>'+
+        '<span class="lbl">'+escapeHtml(l.label)+' <span style="color:var(--mut);font-size:12px">('+l.locale+')</span></span>'+
+        '<button class="mini" data-dir="-1" '+(i===0?'disabled':'')+'>↑</button>'+
+        '<button class="mini" data-dir="1" '+(i===LANGS.length-1?'disabled':'')+'>↓</button>';
+      div.querySelector('input').addEventListener('change', e=>{ LANGS[i].on=e.target.checked; refresh(); });
+      div.querySelectorAll('button.mini').forEach(b=> b.addEventListener('click', ()=>{
+        const dir=parseInt(b.dataset.dir,10); const j=i+dir; if(j<0||j>=LANGS.length) return;
+        [LANGS[i],LANGS[j]]=[LANGS[j],LANGS[i]]; renderLangPicker(); refresh();
+      }));
+      div.addEventListener('dragstart', e=>{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(i)); div.style.opacity='0.4'; });
+      div.addEventListener('dragend', ()=>{ div.style.opacity='1'; document.querySelectorAll('.langitem').forEach(x=>x.classList.remove('dragover')); });
+      div.addEventListener('dragover', e=>{ e.preventDefault(); div.classList.add('dragover'); });
+      div.addEventListener('dragleave', ()=> div.classList.remove('dragover'));
+      div.addEventListener('drop', e=>{ e.preventDefault(); div.classList.remove('dragover'); const from=parseInt(e.dataTransfer.getData('text/plain'),10); const to=i; if(isNaN(from)||from===to) return; const moved=LANGS.splice(from,1)[0]; LANGS.splice(to,0,moved); renderLangPicker(); refresh(); });
+      list.appendChild(div);
+    });
+  }
+  function colSpec(){ const cols=[['scientific_name','Latin name'],['english_name','English']]; selectedLangs().forEach(l=> cols.push([l.key,l.label])); return cols; }
+
+  async function run(){
+    const url=$('td_url').value.trim(); if(!url) return;
+    const date=$('td_date').value; if(!date){ $('td_status').className='meta err'; $('td_status').textContent='Pick a date first.'; return; }
+    $('td_go').disabled=true; $('td_status').className='meta';
+    $('td_status').textContent='Fetching… (first run downloads the eBird taxonomy, then caches it; checking each species against that day can take a few seconds)';
+    $('td_result').classList.add('hidden');
+    try{
+      const r=await fetch(API+'/api?trip='+encodeURIComponent(url)+'&date='+encodeURIComponent(date));
+      if(!r.ok){ const t=await r.text(); throw new Error(t||('HTTP '+r.status)); }
+      LAST=await r.json(); refresh(); $('td_status').textContent='';
+    }catch(e){
+      $('td_status').className='meta err'; $('td_status').textContent='Error: '+e.message;
+    }finally{ $('td_go').disabled=false; }
+  }
+  function refresh(){
+    if(!LAST) return; renderMeta(LAST.meta||{}, LAST.rows||[]); renderChecklists(LAST.checklists||[]); renderTable(LAST.rows||[]); $('td_result').classList.remove('hidden');
+  }
+  function renderMeta(m, rows){
+    rows = rows || [];
+    const bits=[];
+    if(m.date) bits.push(m.date);
+    bits.push((m.num_checklists||0)+' checklist'+(m.num_checklists===1?'':'s'));
+    if(m.num_locations!=null) bits.push(m.num_locations+' location'+(m.num_locations===1?'':'s'));
+    if(m.countries&&m.countries.length) bits.push(escapeHtml(m.countries.join(' / ')));
+    let html = bits.length ? '<span class="tag">'+bits.join('</span> <span class="tag">')+'</span>' : '';
+    const indiv = rows.reduce((s,r)=> s+(r.obs_count||0), 0);
+    const sgline = rows.length
+      ? 'Birds: <b>'+rows.length+'</b> species · <b>'+indiv.toLocaleString()+'</b> individuals on this date'
+      : 'No species recorded on this date yet.';
+    html += '<div style="margin-top:8px;font-size:13px">'+sgline+'</div>';
+    if(m.chinese_fallback_count && selectedLangs().some(l=>l.key==='chinese_name')){
+      html += '<div style="margin-top:6px;color:var(--mut);font-size:12px">Chinese names: '+(m.chinese_native_count||0)+' native; '+(m.chinese_fallback_count||0)+' shown as IOC English fallback (grey italic) for species not occurring in China.</div>';
+    }
+    $('td_metainfo').innerHTML=html;
+  }
+  function renderChecklists(cls){
+    if(!cls || !cls.length){ $('td_checklists').innerHTML=''; return; }
+    let html = '<div class="langtitle" style="margin:10px 0 6px">Checklists on this date</div><div style="display:flex;flex-direction:column;gap:6px">';
+    cls.forEach(c=>{
+      const dt = c.obsDt ? (c.obsDt + (c.obsTime? ' '+c.obsTime:'')) : (c.isoObsDate||'');
+      html += '<div style="font-size:13px">'+escapeHtml(dt)+' — '+escapeHtml(c.locName||'')+
+              (c.numSpecies!=null? ' — '+c.numSpecies+' species':'')+
+              (c.subId? ' — <a href="https://ebird.org/checklist/'+encodeURIComponent(c.subId)+'" target="_blank" rel="noopener">view checklist ↗</a>':'')+'</div>';
+    });
+    html += '</div>';
+    $('td_checklists').innerHTML = html;
+  }
+  function renderTable(rows){
+    const cols=colSpec(); let t='<thead><tr>'; cols.forEach(c=> t+='<th>'+c[1]+'</th>'); t+='<th>Count</th></tr></thead><tbody>';
+    rows.forEach(r=>{ t+='<tr>'; cols.forEach(c=>{ const v=r[c[0]]==null?'':r[c[0]]; let cls=c[0]==='scientific_name'?' class="sci"':''; if(c[0]==='chinese_name'&&r.chinese_is_fallback) cls=' class="fb"'; t+='<td'+cls+'>'+escapeHtml(String(v))+'</td>'; }); t+='<td>'+(r.obs_count||0)+'</td></tr>'; });
+    t+='</tbody>'; $('td_tbl').innerHTML=t;
+  }
+  function toDelim(sep){
+    const cols=colSpec().concat([['obs_count','Count']]); const header=cols.map(c=>c[1]).join(sep);
+    const body=(LAST.rows||[]).map(r=> cols.map(c=>{ let v=(r[c[0]]==null?'':String(r[c[0]])); return sep==='\t'?v:v.replace(/"/g,'""'); }).map(v=> sep==='\t'?v:('"'+v+'"')).join(sep)).join('\n');
+    return header+'\n'+body;
+  }
+  $('td_go').addEventListener('click', run);
+  $('td_url').addEventListener('keydown', e=>{ if(e.key==='Enter') run(); });
+  $('td_csv').addEventListener('click', ()=>{ const blob=new Blob(["\uFEFF"+toDelim(',')],{type:'text/csv;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='tripreport_species_by_date.csv'; a.click(); });
+  $('td_tsv').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(toDelim('\t')); flash('TSV copied to clipboard'); }catch(e){ flash('Copy blocked — use Download CSV'); } });
+  function flash(msg){ const b=$('td_tsv'); const o=b.textContent; b.textContent=msg; setTimeout(()=>b.textContent=o,1200); }
   renderLangPicker();
 })();
 

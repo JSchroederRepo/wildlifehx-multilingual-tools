@@ -1,10 +1,10 @@
 # WildlifeHX Multilingual Species Tools
 
-Three expedition-lecturer tools in one app: a **species translator** plus
-multilingual species lists from **eBird trip reports** and **iNaturalist
-projects**. Designed for polar/nature expedition cruises: pick the taxa you care
-about, tick them on/off, and get names in English plus optional German, French,
-Spanish, Norwegian, Dutch, Chinese, and Japanese.
+Four expedition-lecturer tools in one app: a **species translator** plus
+multilingual species lists from **eBird trip reports** (whole-trip or a single
+day) and **iNaturalist projects**. Designed for polar/nature expedition cruises:
+pick the taxa you care about, tick them on/off, and get names in English plus
+optional German, French, Spanish, Norwegian, Dutch, Chinese, and Japanese.
 
 - **Species translator** (default tab) — type any scientific or common name and
   get it translated into Scientific name, American English, British English (iNat
@@ -16,6 +16,11 @@ Spanish, Norwegian, Dutch, Chinese, and Japanese.
 - **eBird Trip Report** — paste a trip-report URL/ID; get the trip's species with
   multilingual common names. Needs the small Python backend (`app.py`) because
   ebird.org does not allow direct browser requests.
+- **Trip Report by Date** — paste a trip-report URL/ID plus a single date; get only
+  the species and checklists recorded that day (handy for a daily expedition
+  recap), including a link to each matching checklist on ebird.org. Uses the same
+  backend as the eBird tab, cross-referencing eBird's per-species checklist detail
+  against the trip's checklist list to isolate one day.
 - **iNaturalist Project** — paste a project URL/slug/ID; get species counts grouped
   into Plants, Birds, Vertebrates, Insects, Plankton, and Other, with multilingual
   vernacular names. Runs fully in the browser (calls the public iNaturalist API).
@@ -29,9 +34,9 @@ library only.
 python3 app.py --serve --port 8000
 ```
 
-Then open <http://localhost:8000>. All three tools work; the eBird tab talks to the
-backend on the same origin (`/api`), the translator and iNaturalist tabs talk
-directly to `api.inaturalist.org`.
+Then open <http://localhost:8000>. All four tools work; the eBird and Trip Report
+by Date tabs talk to the backend on the same origin (`/api`), the translator and
+iNaturalist tabs talk directly to `api.inaturalist.org`.
 
 > Python 3.7+ is the only requirement. No `pip install` needed.
 
@@ -66,6 +71,13 @@ backend and proxied to the browser via `/api?trip=<id>`.
     list for the trip (also the source of the scientific name and the English name).
   - `…/narrative/{id}`, `…/num-species/{id}`, `…/num-checklists/{id}`,
     `…/locations/{id}` — trip metadata (description, counts, countries, locations).
+  - `…/checklists/{id}` — every checklist submitted to the trip, with its submission
+    ID, date/time, and location. Used by the **Trip Report by Date** tab to find
+    which checklists fall on the requested day.
+  - `…/taxon-detail/{id}/{speciesCode}` — per species, the individual checklists it
+    was seen on (with date and count). The **Trip Report by Date** tab calls this
+    once per species (in parallel) and keeps only the checklists matching the
+    requested day, then sums the counts for that day.
 - **Multilingual common names** — the eBird taxonomy, one CSV per locale:
   `https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}`
   Locales fetched: `de` (German), `fr` (French), `es` (Spanish), `nl` (Dutch),
