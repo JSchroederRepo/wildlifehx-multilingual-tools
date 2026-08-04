@@ -103,6 +103,19 @@
 
   /* ===== Bird ID Key ===== */
   html { scroll-behavior:smooth; }
+  .bk-download-hero { background:linear-gradient(135deg, var(--acc), #3f7cb8); border-radius:14px;
+          padding:20px 22px; margin-bottom:20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  .bk-download-icon { flex:0 0 auto; width:48px; height:48px; display:flex; align-items:center; justify-content:center;
+          background:rgba(6,32,58,.18); border-radius:10px; }
+  .bk-download-icon svg { width:26px; height:26px; }
+  .bk-download-text { flex:1 1 260px; color:#06203a; }
+  .bk-download-text .en { font-size:16px; font-weight:700; }
+  .bk-download-text .de { font-size:13px; opacity:.85; margin-top:1px; }
+  .bk-download-btn { flex:0 0 auto; background:#06203a; color:#fff; border-radius:999px; padding:12px 22px;
+          font-size:14px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+          box-shadow:0 2px 8px rgba(0,0,0,.2); }
+  .bk-download-btn:hover { background:#0a2c4d; }
+  .bk-download-btn svg { width:16px; height:16px; }
   .bk-intro { color:var(--mut); font-size:14px; margin:0 0 16px; line-height:1.55; }
   .bk-intro .de { margin-top:4px; }
   .bk-jumpnav { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
@@ -178,6 +191,8 @@
     .bkgoto { margin-left:0; width:100%; justify-content:center; }
     .bkrow { gap:8px; }
     .bk-sectionhead { padding:12px 14px; }
+    .bk-download-hero { padding:16px; gap:12px; }
+    .bk-download-btn { width:100%; justify-content:center; }
   }
   @keyframes bkflash { 0% { box-shadow:0 0 0 2px var(--acc); } 100% { box-shadow:0 0 0 2px transparent; } }
   .bkcard.bkflash { animation:bkflash 1.1s ease-out; }
@@ -317,6 +332,19 @@
   <!-- ================= Bird ID Key panel ================= -->
   <div class="panel" id="panel-bk">
     <div class="card">
+      <a class="bk-download-hero" href="downloads/Birds-of-NW-Greenland-Cheat-Sheet.pdf" target="_blank" rel="noopener" style="text-decoration:none">
+        <div class="bk-download-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#06203a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+        </div>
+        <div class="bk-download-text">
+          <div class="en">Download the printable 4-page PDF cheat sheet</div>
+          <div class="de">Lade das druckbare 4-seitige PDF-Bestimmungsblatt herunter</div>
+        </div>
+        <span class="bk-download-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>
+          Download PDF
+        </span>
+      </a>
       <div class="bk-intro">
         <div class="en"><b>Common Birds of North-West Greenland — Quick Identification Cheat Sheet.</b> Two short keys: one for gull-like birds, one for the fast, dark auks. Tap a "Go to" link to jump straight to that question. By Julia Schroeder.</div>
         <div class="de">Häufige Vögel im Nordwesten Grönlands — Schnellbestimmung. Zwei kurze Bestimmungsschlüssel: einer für Vögel, die wie Möwen aussehen, und einer für schwarze, schnellfliegende Seevögel. Tippe auf einen "Gehe zu"-Link, um direkt zu dieser Frage zu springen.</div>
@@ -324,7 +352,6 @@
       <div class="bk-jumpnav">
         <a href="#gull-1">Gull-like key / Möwen-Schlüssel →</a>
         <a href="#auk-1">Black auks key / Alken-Schlüssel →</a>
-        <a href="downloads/Birds-of-NW-Greenland-Cheat-Sheet.pdf" target="_blank" rel="noopener">Download original PDF</a>
       </div>
     </div>
 
@@ -342,7 +369,10 @@
       </div>
       <div class="bkrow bkresult">
         <span class="bkyes">Yes / Ja</span>
-        <div class="bkspecies"><div class="sp-en">Kittiwake</div><div class="sp-de">Dreizehenmöwe</div></div>
+        <div class="bkspecies-photo">
+          <img class="bkphoto" src="images/birdkey/kittiwake.jpg" alt="Kittiwake in flight over water">
+          <div><div class="sp-en">Kittiwake</div><div class="sp-de">Dreizehenmöwe</div><div class="bkcredit">Photo: C. J. Sharp, CC BY-SA 3.0</div></div>
+        </div>
       </div>
       <div class="bkrow">
         <span class="bkno">No / Nein</span>
@@ -361,7 +391,7 @@
         <span class="bkyes">Yes / Ja</span>
         <div class="bkspecies-photo">
           <img class="bkphoto" src="images/birdkey/fulmar.jpg" alt="Fulmar in flight over water">
-          <div><div class="sp-en">Fulmar</div><div class="sp-de">Eissturmvogel</div><div class="bkcredit">Photo: C. J. Sharp, CC BY-SA 3.0</div></div>
+          <div><div class="sp-en">Fulmar</div><div class="sp-de">Eissturmvogel</div><div class="bkcredit">Photo: K. Billington, CC BY-SA 3.0</div></div>
         </div>
       </div>
       <div class="bkrow">
@@ -657,6 +687,8 @@ function setLastTrip(v){ try{ if(v) localStorage.setItem(LAST_TRIP_KEY, v); }cat
 /* ====================== Trip Report by Date tool ====================== */
 (function(){
   const $ = id => document.getElementById(id);
+  // app.py serves both this page and /api on the same origin, so use a relative path.
+  // Works locally (python3 app.py --serve) and on any host running app.py.
   const API = '';
   let LAST = null;
   const ALL_LANGS = [
