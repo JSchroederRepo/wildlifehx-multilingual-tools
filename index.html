@@ -142,9 +142,9 @@
 
   <div class="tabs">
     <div class="tab active" data-tab="tr">Species translator</div>
+    <div class="tab" data-tab="td">Trip Report by Date</div>
     <div class="tab" data-tab="eb">eBird Trip Report</div>
     <div class="tab" data-tab="in">iNaturalist Project</div>
-    <div class="tab" data-tab="td">Trip Report by Date</div>
   </div>
 
   <!-- ================= Species translator panel ================= -->
@@ -162,6 +162,34 @@
         <div id="tr_metainfo" class="meta"></div>
         <div id="tr_tbl" class="ngrid"></div>
         <details class="fixednote"><summary>Where the names come from</summary><p>For birds, names use the Cornell/eBird taxonomy common-name sets — the same namesets Birds of the World uses (American English, German, French, Spanish, Norwegian, Danish, Swedish, Finnish, Dutch, Polish, Russian, Chinese, Japanese). The eBird taxonomy does not expose true British English names reliably, so “British English / alternates” is still drawn from iNaturalist’s alternate-English list as a best-effort cue (it may include non-British alternates — treat it as a cue to double-check). For non-bird taxa, all names come from iNaturalist’s vernacular-name records by locale. If the wrong species appears, pick another match above.</p></details>
+      </div>
+    </div>
+  </div>
+  <!-- ================= Trip Report by Date panel ================= -->
+  <div class="panel" id="panel-td">
+    <div class="card">
+      <div class="row">
+        <input id="td_url" type="text" placeholder="eBird trip report URL or ID">
+        <input id="td_date" type="date">
+        <button id="td_go">Generate</button>
+      </div>
+      <p class="meta" id="td_status"></p>
+      <p class="fixednote">Shows only the species and checklists recorded on the chosen day within the trip report — useful for daily expedition recaps.</p>
+    </div>
+    <div class="card">
+      <p class="langtitle">Additional languages (tick to include, drag or use ↑/↓ to order):</p>
+      <div id="td_langlist" class="langlist"></div>
+      <p class="fixednote">Latin (scientific) and English are always shown as the first two columns.</p>
+    </div>
+    <div id="td_result" class="hidden">
+      <div class="card">
+        <div id="td_metainfo" class="meta"></div>
+        <div id="td_checklists"></div>
+        <div class="tools" style="margin-top:10px">
+          <button class="ghost" id="td_csv">Download CSV</button>
+          <button class="ghost" id="td_tsv">Copy TSV (paste into Excel)</button>
+        </div>
+        <div style="overflow:auto; max-height:70vh"><table id="td_tbl"></table></div>
       </div>
     </div>
   </div>
@@ -237,34 +265,6 @@
       </div>
     </div>
   </div>
-  <!-- ================= Trip Report by Date panel ================= -->
-  <div class="panel" id="panel-td">
-    <div class="card">
-      <div class="row">
-        <input id="td_url" type="text" placeholder="eBird trip report URL or ID">
-        <input id="td_date" type="date">
-        <button id="td_go">Generate</button>
-      </div>
-      <p class="meta" id="td_status"></p>
-      <p class="fixednote">Shows only the species and checklists recorded on the chosen day within the trip report — useful for daily expedition recaps.</p>
-    </div>
-    <div class="card">
-      <p class="langtitle">Additional languages (tick to include, drag or use ↑/↓ to order):</p>
-      <div id="td_langlist" class="langlist"></div>
-      <p class="fixednote">Latin (scientific) and English are always shown as the first two columns.</p>
-    </div>
-    <div id="td_result" class="hidden">
-      <div class="card">
-        <div id="td_metainfo" class="meta"></div>
-        <div id="td_checklists"></div>
-        <div class="tools" style="margin-top:10px">
-          <button class="ghost" id="td_csv">Download CSV</button>
-          <button class="ghost" id="td_tsv">Copy TSV (paste into Excel)</button>
-        </div>
-        <div style="overflow:auto; max-height:70vh"><table id="td_tbl"></table></div>
-      </div>
-    </div>
-  </div>
   <footer class="foot"><div>© 2026 Julia Schroeder. eBird data © <a href="https://ebird.org" target="_blank" rel="noopener">Cornell Lab of Ornithology</a>; iNaturalist data © <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist contributors</a>.</div><div class="contactwrap"><button id="contact_btn" class="contactbtn" type="button" title="Reveal a contact email">Contact</button></div></footer>
 </div>
 
@@ -280,6 +280,13 @@ document.querySelectorAll('.tab').forEach(t => {
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
+
+// Remembers the last eBird trip report URL/ID entered, shared between the
+// "eBird Trip Report" and "Trip Report by Date" tabs so switching tabs (or
+// coming back later) keeps it pre-filled.
+const LAST_TRIP_KEY = 'wildlifehx_last_trip';
+function getLastTrip(){ try{ return localStorage.getItem(LAST_TRIP_KEY) || ''; }catch(e){ return ''; } }
+function setLastTrip(v){ try{ if(v) localStorage.setItem(LAST_TRIP_KEY, v); }catch(e){} }
 
 /* ====================== contact (click-to-reveal, bot-resistant) ====================== */
 (function(){
@@ -309,6 +316,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const ALL_LANGS = [
     {key:'german_name',    label:'German',    locale:'de'},
     {key:'french_name',    label:'French',    locale:'fr'},
+    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
     {key:'spanish_name',   label:'Spanish',   locale:'es'},
     {key:'dutch_name',     label:'Dutch',     locale:'nl'},
     {key:'norwegian_name', label:'Norwegian', locale:'no'},
@@ -317,10 +325,13 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {key:'finnish_name',   label:'Finnish',   locale:'fi'},
     {key:'polish_name',    label:'Polish',    locale:'pl'},
     {key:'russian_name',   label:'Russian',   locale:'ru'},
-    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
   ];
-  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  const DEFAULT_ON = new Set(['german_name','french_name','chinese_name']);
+  let LANGS = ALL_LANGS.map(l=>({...l, on: DEFAULT_ON.has(l.key)}));
   function selectedLangs(){ return LANGS.filter(l=>l.on); }
+
+  // pre-fill the trip report field with the last one used (this tab or the Trip Report by Date tab).
+  (function(){ const saved = getLastTrip(); if(saved) $('eb_url').value = saved; })();
 
   function renderLangPicker(){
     const list = $('eb_langlist'); list.innerHTML = '';
@@ -348,6 +359,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
 
   async function run(){
     const url=$('eb_url').value.trim(); if(!url) return;
+    setLastTrip(url);
     $('eb_go').disabled=true; $('eb_status').className='meta';
     $('eb_status').textContent='Fetching… (first run downloads the eBird taxonomy, ~15 MB across languages, then caches it)';
     $('eb_result').classList.add('hidden');
@@ -409,6 +421,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const ALL_LANGS = [
     {key:'german_name',    label:'German',    locale:'de'},
     {key:'french_name',    label:'French',    locale:'fr'},
+    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
     {key:'spanish_name',   label:'Spanish',   locale:'es'},
     {key:'dutch_name',     label:'Dutch',     locale:'nl'},
     {key:'norwegian_name', label:'Norwegian', locale:'no'},
@@ -417,15 +430,17 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {key:'finnish_name',   label:'Finnish',   locale:'fi'},
     {key:'polish_name',    label:'Polish',    locale:'pl'},
     {key:'russian_name',   label:'Russian',   locale:'ru'},
-    {key:'chinese_name',   label:'Chinese',   locale:'zh_SIM'},
   ];
-  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  const DEFAULT_ON = new Set(['german_name','french_name','chinese_name']);
+  let LANGS = ALL_LANGS.map(l=>({...l, on: DEFAULT_ON.has(l.key)}));
   function selectedLangs(){ return LANGS.filter(l=>l.on); }
 
-  // default the date picker to today, in the visitor's local timezone
+  // default the date picker to today, in the visitor's local timezone, and
+  // pre-fill the trip report field with the last one used (this tab or the eBird tab).
   (function(){
     const d=new Date(); const pad=n=>String(n).padStart(2,'0');
     $('td_date').value = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+    const saved = getLastTrip(); if(saved) $('td_url').value = saved;
   })();
 
   function renderLangPicker(){
@@ -454,6 +469,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
 
   async function run(){
     const url=$('td_url').value.trim(); if(!url) return;
+    setLastTrip(url);
     const date=$('td_date').value; if(!date){ $('td_status').className='meta err'; $('td_status').textContent='Pick a date first.'; return; }
     $('td_go').disabled=true; $('td_status').className='meta';
     $('td_status').textContent='Fetching… (first run downloads the eBird taxonomy, then caches it; checking each species against that day can take a few seconds)';
@@ -529,12 +545,13 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const ALL_LANGS = [
     {key:'german_name',    label:'German',    locales:['de']},
     {key:'french_name',    label:'French',    locales:['fr']},
+    {key:'chinese_name',   label:'Chinese',   locales:['zh-CN','zh-Hans','zh'], cjk:true},
     {key:'spanish_name',   label:'Spanish',   locales:['es']},
     {key:'norwegian_name', label:'Norwegian', locales:['nb','nn','no']},
     {key:'dutch_name',     label:'Dutch',     locales:['nl']},
-    {key:'chinese_name',   label:'Chinese',   locales:['zh-CN','zh-Hans','zh'], cjk:true},
   ];
-  let LANGS = ALL_LANGS.map(l=>({...l, on:true}));
+  const DEFAULT_ON = new Set(['german_name','french_name','chinese_name']);
+  let LANGS = ALL_LANGS.map(l=>({...l, on: DEFAULT_ON.has(l.key)}));
   const CATS = [{key:'Plants',label:'Plants'},{key:'Birds',label:'Birds'},{key:'Vertebrates',label:'Vertebrates'},{key:'Insects',label:'Insects'},{key:'Plankton',label:'Plankton'},{key:'Other',label:'Other'}];
   let CAT_ON = {}; CATS.forEach(c=>CAT_ON[c.key]=true);
   function selectedLangs(){ return LANGS.filter(l=>l.on); }
@@ -749,6 +766,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const LANGS = [
     {label:'German',                 locale:'de'},
     {label:'French',                 locale:'fr'},
+    {label:'Chinese (Simplified)',   locale:'zh-CN', alt:'zh'},
     {label:'Spanish',                locale:'es'},
     {label:'Norwegian',              locale:'nb'},
     {label:'Danish',                 locale:'da'},
@@ -757,7 +775,6 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {label:'Dutch',                  locale:'nl'},
     {label:'Polish',                 locale:'pl'},
     {label:'Russian',                locale:'ru'},
-    {label:'Chinese (Simplified)',   locale:'zh-CN', alt:'zh'},
     {label:'Japanese',               locale:'ja'},
   ];
   // eBird-taxonomy locales for bird names (Birds-of-the-World-aligned namesets).
@@ -766,6 +783,7 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
   const BIRD_LANGS = [
     {label:'German',                loc:'de'},
     {label:'French',                loc:'fr'},
+    {label:'Chinese (Simplified)',  loc:'zh_SIM'},
     {label:'Spanish',               loc:'es'},
     {label:'Norwegian',             loc:'no'},
     {label:'Danish',                loc:'da'},
@@ -774,7 +792,6 @@ function cap(s){ return s? s.charAt(0).toUpperCase()+s.slice(1):s; }
     {label:'Dutch',                 loc:'nl'},
     {label:'Polish',                loc:'pl'},
     {label:'Russian',               loc:'ru'},
-    {label:'Chinese (Simplified)',  loc:'zh_SIM'},
     {label:'Japanese',              loc:'ja'},
   ];
   let STATE = { results: [] };
