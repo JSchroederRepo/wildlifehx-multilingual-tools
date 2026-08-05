@@ -25,9 +25,17 @@ TRIPCHECKLISTS_URL = "https://ebird.org/tripreport-internal/v1/checklists/{id}"
 TRIPTAXONDETAIL_URL = "https://ebird.org/tripreport-internal/v1/taxon-detail/{id}/{code}"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TAXONOMY_URL = "https://api.ebird.org/v2/ref/taxonomy/ebird?locale={locale}"
+# Lightweight endpoint (small JSON, not the full taxonomy CSV) that reports eBird's
+# current taxonomy authority version -- used to detect real updates on the source
+# side instead of re-downloading on a fixed schedule.
+TAXONOMY_VERSIONS_URL = "https://api.ebird.org/v2/ref/taxonomy/versions"
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "ebird_tripreport_names")
-CACHE_TTL_SECONDS = 30 * 24 * 3600
+# How often we're willing to ask eBird's /versions endpoint "has anything changed?".
+# This is just a rate limit on the (cheap) version check itself -- it does NOT mean
+# the taxonomy CSVs get re-downloaded this often. Those are only re-downloaded when
+# the reported authority version actually differs from what we last cached.
+VERSION_CHECK_INTERVAL_SECONDS = 24 * 3600
 
 NAME_COLUMNS = [
     ("de", "german_name", "German", False),
@@ -149,14 +157,101 @@ def _cache_path(locale):
     return os.path.join(CACHE_DIR, f"ebird_taxonomy_{locale}.csv")
 
 
+def _version_cache_path():
+    return os.path.join(CACHE_DIR, "taxonomy_version.json")
+
+
+def _load_stored_version():
+    path = _version_cache_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+
+def _save_stored_version(authority_ver):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    try:
+        with open(_version_cache_path(), "w", encoding="utf-8") as f:
+            json.dump({"authority_ver": authority_ver, "checked_at": time.time()}, f)
+    except Exception:
+        pass
+
+
+def get_latest_taxonomy_version():
+    """Ask eBird which taxonomy authority version is current. This hits a tiny
+    JSON endpoint (a list of version numbers), NOT the multi-thousand-row taxonomy
+    CSV, so it's cheap to call just to check for updates."""
+    data = http_get_json(TAXONOMY_VERSIONS_URL)
+    if not isinstance(data, list) or not data:
+        return None
+    for entry in data:
+        if entry.get("latest"):
+            return entry.get("authorityVer")
+    return max((e.get("authorityVer") for e in data if "authorityVer" in e), default=None)
+
+
+def _locales_missing_cache(locales):
+    return [loc for loc in locales if not os.path.exists(_cache_path(loc))]
+
+
+def refresh_taxonomy_if_source_updated(locales, force_refresh=False):
+    """Re-download the taxonomy CSVs only when eBird's source has actually published
+    a new authority version (or we've never cached one, or a locale file is missing).
+    Otherwise, the on-disk cache is treated as current indefinitely -- no fixed expiry.
+
+    The (cheap) version check itself is only performed at most once every
+    VERSION_CHECK_INTERVAL_SECONDS, so normal traffic doesn't hit eBird's API on
+    every request either -- it just periodically confirms nothing changed.
+    """
+    stored = _load_stored_version()
+    missing = _locales_missing_cache(locales)
+
+    if not force_refresh and stored and not missing:
+        if time.time() - stored.get("checked_at", 0) < VERSION_CHECK_INTERVAL_SECONDS:
+            return  # checked recently enough and everything is cached -- trust it
+
+    try:
+        latest = get_latest_taxonomy_version()
+    except Exception:
+        latest = None  # source unreachable -- fall through to using whatever we have
+
+    up_to_date = (
+        not force_refresh
+        and not missing
+        and stored is not None
+        and latest is not None
+        and stored.get("authority_ver") == latest
+    )
+    if up_to_date:
+        _save_stored_version(latest)  # just bump checked_at so we don't ask again soon
+        return
+
+    if latest is None and not missing and stored is not None:
+        # Couldn't reach the version check, but we already have a full cache -- keep it
+        # rather than failing the request.
+        return
+
+    # Either the source version changed, or we have no (complete) cache yet: download
+    # every locale fresh and record the version they correspond to.
+    global _SCI_INDEX
+    for locale in locales:
+        raw = http_get(TAXONOMY_URL.format(locale=locale), accept="text/csv", timeout=120)
+        with open(_cache_path(locale), "wb") as f:
+            f.write(raw)
+        _TAX_CACHE.pop(locale, None)  # invalidate in-memory copy so the new file is read
+    _SCI_INDEX = None  # rebuild the sci-name -> species-code index from the fresh data
+    if latest is not None:
+        _save_stored_version(latest)
+
+
 def load_taxonomy(locale, force_refresh=False):
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = _cache_path(locale)
-    use_cache = False
-    if not force_refresh and os.path.exists(path):
-        if time.time() - os.path.getmtime(path) < CACHE_TTL_SECONDS:
-            use_cache = True
-    if not use_cache:
+    if force_refresh or not os.path.exists(path):
         raw = http_get(TAXONOMY_URL.format(locale=locale), accept="text/csv", timeout=120)
         with open(path, "wb") as f: f.write(raw)
     name_map = {}
@@ -175,8 +270,12 @@ def load_taxonomy(locale, force_refresh=False):
 
 
 def build_name_maps(force_refresh=False):
-    return {locale: load_taxonomy(locale, force_refresh=force_refresh)
-            for locale, _, _, _ in NAME_COLUMNS}
+    # Refresh against the full BIRD_NAME_LOCALES set (not just this function's own
+    # NAME_COLUMNS subset) so the trip-report tools and the species translator always
+    # share one consistent "are we current with eBird's source?" version check.
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    refresh_taxonomy_if_source_updated(BIRD_NAME_LOCALES, force_refresh=force_refresh)
+    return {locale: load_taxonomy(locale) for locale, _, _, _ in NAME_COLUMNS}
 
 
 # ---- in-memory cache + bird-name lookup (translator, Birds-of-the-World-aligned) ----
@@ -185,6 +284,7 @@ _SCI_INDEX = None
 
 
 def get_taxonomy(locale):
+    refresh_taxonomy_if_source_updated(BIRD_NAME_LOCALES)
     m = _TAX_CACHE.get(locale)
     if m is None:
         m = load_taxonomy(locale)
