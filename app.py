@@ -10,7 +10,7 @@ In production (pplx.app) the static index.html is served from S3 and only
 /port/8000/api requests are proxied to this server. Stdlib-only, no dependencies.
 """
 from __future__ import annotations
-import csv, io, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
+import csv, io, json, mimetypes, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -331,12 +331,8 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         # serve the combined UI locally (production serves index.html from S3)
-        if path in ("", "/", "/index.html"):
-            try:
-                with open(os.path.join(HERE, "index.html"), "rb") as f:
-                    return self._send(200, f.read(), "text/html; charset=utf-8")
-            except FileNotFoundError:
-                return self._send(404, b"index.html not found", "text/plain; charset=utf-8")
+        if path in ("", "/"):
+            path = "/index.html"
         if path.rstrip("/").endswith("/api") or path == "/api":
             qs = urllib.parse.parse_qs(parsed.query)
             bird = (qs.get("birdnames", [""])[0]).strip()
@@ -368,6 +364,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, str(e).encode("utf-8"), "text/plain; charset=utf-8")
             except Exception as e:
                 return self._send(500, str(e).encode("utf-8"), "text/plain; charset=utf-8")
+        # Static file serving: pages (index/ebird/inaturalist/birdid), styles.css,
+        # shared.js, and the images/ and downloads/ folders. Needed for standalone
+        # self-hosting (e.g. Render) where this process is the only server.
+        rel = urllib.parse.unquote(path).lstrip("/")
+        full = os.path.normpath(os.path.join(HERE, rel))
+        if full == HERE or full.startswith(HERE + os.sep):
+            if os.path.isfile(full):
+                ctype, _ = mimetypes.guess_type(full)
+                ctype = ctype or "application/octet-stream"
+                if ctype.startswith("text/") or ctype in ("application/javascript", "application/json"):
+                    ctype += "; charset=utf-8"
+                try:
+                    with open(full, "rb") as f:
+                        return self._send(200, f.read(), ctype)
+                except OSError:
+                    pass
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
 
